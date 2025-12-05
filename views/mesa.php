@@ -920,12 +920,13 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
     }
     
     /** 🔹 Agregar producto directamente (con o sin variedades) */
-    function agregarProductoDirecto(producto_id, variedades) {
+    function agregarProductoDirecto(producto_id, variedades, notaAdicional) {
         console.log('🔹 agregarProductoDirecto llamado con:', {
             producto_id_recibido: producto_id,
             tipo_producto_id: typeof producto_id,
             variedades_recibidas: variedades,
-            variedades_es_objeto: typeof variedades === 'object'
+            variedades_es_objeto: typeof variedades === 'object',
+            nota_adicional: notaAdicional
         });
         
         // CRÍTICO: Validar que producto_id no sea null o undefined
@@ -955,12 +956,18 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
             }
         }
         
+        // Agregar nota adicional si existe
+        if (notaAdicional && notaAdicional.trim() !== '') {
+            formData.append('nota_adicional', notaAdicional.trim());
+        }
+        
         // Debug: Mostrar qué se está enviando
         console.log('🔹 Enviando producto:', {
             producto_id: producto_id,
             cantidad: 1,
             orden_id: ordenId,
-            variedades: variedades
+            variedades: variedades,
+            nota_adicional: notaAdicional
         });
         
         fetch('/POS/controllers/newPos/agregar_producto_orden.php', {
@@ -1079,6 +1086,18 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
     function limpiarEstadoVariedades() {
         productoSeleccionadoId = null;
         variedadesSeleccionadas = {};
+        
+        // Limpiar nota adicional
+        const checkNota = document.getElementById('check-nota-adicional');
+        const campoNota = document.getElementById('campo-nota-adicional');
+        const textareaNota = document.getElementById('nota-adicional-texto');
+        
+        if (checkNota) checkNota.checked = false;
+        if (campoNota) campoNota.classList.add('hidden');
+        if (textareaNota) {
+            textareaNota.value = '';
+            document.getElementById('contador-caracteres').textContent = '0/200';
+        }
     }
     
     function renderGruposVariedades(grupos) {
@@ -1102,10 +1121,12 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
                 grupo.opciones.forEach(function(opcion) {
                     const opcionId = 'opcion_' + grupo.id + '_' + opcion.id;
                     const inputName = 'grupo_' + grupo.id;
+                    const isObligatorio = grupo.obligatorio == 1;
+                    const inputType = isObligatorio ? 'radio' : 'checkbox';
                     
                     html += '<label class="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg border border-slate-600/30 hover:border-orange-500/50 hover:bg-slate-700/50 cursor-pointer transition-all group">';
                     html += '<div class="flex items-center gap-3 flex-1">';
-                    html += '<input type="radio" id="' + opcionId + '" name="' + inputName + '" ';
+                    html += '<input type="' + inputType + '" id="' + opcionId + '" name="' + inputName + '" ';
                     html += 'value="' + opcion.id + '" ';
                     html += 'data-grupo-id="' + grupo.id + '" ';
                     html += 'data-grupo-nombre="' + escapeHtml(grupo.nombre) + '" ';
@@ -1113,7 +1134,7 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
                     html += 'data-precio="' + opcion.precio_adicional + '" ';
                     html += 'data-obligatorio="' + grupo.obligatorio + '" ';
                     html += 'class="w-5 h-5 text-orange-600 bg-slate-700 border-slate-500 focus:ring-orange-500 focus:ring-2 cursor-pointer" ';
-                    html += 'onchange="seleccionarVariedad(' + grupo.id + ', ' + opcion.id + ', \'' + escapeHtml(grupo.nombre) + '\', \'' + escapeHtml(opcion.nombre) + '\', ' + opcion.precio_adicional + ')">';
+                    html += 'onchange="seleccionarVariedad(' + grupo.id + ', ' + opcion.id + ', \'' + escapeHtml(grupo.nombre) + '\', \'' + escapeHtml(opcion.nombre) + '\', ' + opcion.precio_adicional + ', ' + grupo.obligatorio + ', this)">';
                     html += '<span class="text-white font-medium">' + escapeHtml(opcion.nombre) + '</span>';
                     html += '</div>';
                     
@@ -1134,14 +1155,32 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
         container.innerHTML = html;
     }
     
-    function seleccionarVariedad(grupoId, opcionId, grupoNombre, opcionNombre, precio) {
-        variedadesSeleccionadas[grupoId] = {
-            grupo_id: grupoId,
-            opcion_id: opcionId,
-            grupo_nombre: grupoNombre,
-            opcion_nombre: opcionNombre,
-            precio_adicional: precio
-        };
+    function seleccionarVariedad(grupoId, opcionId, grupoNombre, opcionNombre, precio, esObligatorio, checkbox) {
+        // Para grupos obligatorios (radio buttons), funciona como antes
+        if (esObligatorio == 1) {
+            variedadesSeleccionadas[grupoId] = {
+                grupo_id: grupoId,
+                opcion_id: opcionId,
+                grupo_nombre: grupoNombre,
+                opcion_nombre: opcionNombre,
+                precio_adicional: precio
+            };
+        } else {
+            // Para grupos no obligatorios (checkboxes), toggle on/off
+            if (checkbox.checked) {
+                // Agregar la variedad si está marcada
+                variedadesSeleccionadas[grupoId] = {
+                    grupo_id: grupoId,
+                    opcion_id: opcionId,
+                    grupo_nombre: grupoNombre,
+                    opcion_nombre: opcionNombre,
+                    precio_adicional: precio
+                };
+            } else {
+                // Eliminar la variedad si está desmarcada
+                delete variedadesSeleccionadas[grupoId];
+            }
+        }
         
         console.log('Variedad seleccionada:', variedadesSeleccionadas[grupoId]);
     }
@@ -1186,12 +1225,18 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
         // Convertir objeto de variedades a array de valores
         const variedadesArray = Object.values(variedadesSeleccionadas);
         
+        // Obtener nota adicional si existe
+        const notaAdicional = document.getElementById('check-nota-adicional').checked 
+            ? document.getElementById('nota-adicional-texto').value.trim() 
+            : null;
+        
         console.log('🔹 variedadesArray (convertido):', variedadesArray);
+        console.log('🔹 Nota adicional:', notaAdicional);
         console.log('🔹 Llamando agregarProductoDirecto con ID:', productoSeleccionadoId);
         
-        // Todo válido, agregar producto con variedades
+        // Todo válido, agregar producto con variedades y nota
         cerrarModalVariedades();
-        agregarProductoDirecto(productoSeleccionadoId, variedadesArray);
+        agregarProductoDirecto(productoSeleccionadoId, variedadesArray, notaAdicional);
     }
     
     function escapeHtml(text) {
@@ -1204,6 +1249,39 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
         };
         return text.replace(/[&<>"']/g, function(m) { return map[m]; });
     }
+    
+    /** 🔹 Funciones para nota adicional */
+    function toggleNotaAdicional() {
+        const checkbox = document.getElementById('check-nota-adicional');
+        const campoNota = document.getElementById('campo-nota-adicional');
+        const textareaNota = document.getElementById('nota-adicional-texto');
+        
+        if (checkbox.checked) {
+            campoNota.classList.remove('hidden');
+            setTimeout(() => textareaNota.focus(), 100);
+        } else {
+            campoNota.classList.add('hidden');
+            textareaNota.value = '';
+            document.getElementById('contador-caracteres').textContent = '0/200';
+        }
+    }
+    
+    // Event listener para contador de caracteres
+    document.addEventListener('DOMContentLoaded', function() {
+        const textareaNota = document.getElementById('nota-adicional-texto');
+        if (textareaNota) {
+            textareaNota.addEventListener('input', function() {
+                const contador = document.getElementById('contador-caracteres');
+                contador.textContent = this.value.length + '/200';
+                
+                if (this.value.length >= 200) {
+                    contador.classList.add('text-orange-500', 'font-bold');
+                } else {
+                    contador.classList.remove('text-orange-500', 'font-bold');
+                }
+            });
+        }
+    });
 
     /** 🔹 Determinar Estado Visual del Producto */
     function getEstadoProducto(cantidad, preparado, cancelado, pendiente_cancelacion = 0) {
@@ -1598,6 +1676,19 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
                         html += '</div>';
                     }
                     
+                    // Mostrar nota adicional si existe
+                    if (item.nota_adicional && item.nota_adicional.trim() !== '') {
+                        html += '<div class="mt-2 mb-2 p-2 bg-yellow-500/20 border border-yellow-500/40 rounded-md">';
+                        html += '<div class="flex items-start gap-2">';
+                        html += '<i class="bi bi-sticky text-yellow-400 mt-0.5"></i>';
+                        html += '<div class="text-xs text-yellow-200">';
+                        html += '<span class="font-semibold text-yellow-300">Nota adicional:</span> ';
+                        html += '<span class="text-yellow-100">' + item.nota_adicional + '</span>';
+                        html += '</div>';
+                        html += '</div>';
+                        html += '</div>';
+                    }
+                    
                     html += '<div class="flex justify-between items-center">' +
                         '<div class="text-slate-300 text-sm">' +
                         '$' + Number(item.precio).toFixed(2) + ' c/u' +
@@ -1703,6 +1794,36 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
                         data.productos_cancelados.length + ' producto(s) cancelado(s)' +
                         '</div>' +
                         '</div>';
+                }
+
+                // Mostrar notas adicionales si existen
+                let notasAdicionales = [];
+                if (data.items && data.items.length > 0) {
+                    data.items.forEach(function(item) {
+                        if (item.nota_adicional && item.nota_adicional.trim() !== '' && item.cancelado != 1) {
+                            notasAdicionales.push({
+                                nombre: item.nombre,
+                                nota: item.nota_adicional
+                            });
+                        }
+                    });
+                }
+
+                if (notasAdicionales.length > 0) {
+                    resumen += '<div class="mt-3 p-3 bg-yellow-500/10 rounded-lg border border-yellow-500/30">' +
+                        '<div class="text-yellow-300 text-xs font-semibold mb-2 flex items-center gap-1">' +
+                        '<i class="bi bi-sticky"></i> Notas adicionales:' +
+                        '</div>' +
+                        '<div class="space-y-2">';
+                    
+                    notasAdicionales.forEach(function(item) {
+                        resumen += '<div class="text-xs">' +
+                            '<span class="text-yellow-400 font-medium">' + item.nombre + ':</span> ' +
+                            '<span class="text-yellow-100">' + item.nota + '</span>' +
+                            '</div>';
+                    });
+                    
+                    resumen += '</div></div>';
                 }
 
                 resumen += '</div>';
@@ -2595,6 +2716,32 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
         <div class="flex-1 overflow-y-auto p-6 space-y-6" style="scrollbar-width: thin; scrollbar-color: rgba(71, 85, 105, 0.5) rgba(15, 23, 42, 0.3);">
             <div id="variedades-grupos-container">
                 <!-- Los grupos de variedades se cargarán aquí dinámicamente -->
+            </div>
+            
+            <!-- Sección de nota adicional -->
+            <div class="bg-slate-700/50 rounded-xl p-5 border border-slate-600/50">
+                <div class="flex items-center mb-4">
+                    <input type="checkbox" id="check-nota-adicional" 
+                           class="w-5 h-5 text-orange-600 bg-slate-700 border-slate-500 rounded focus:ring-orange-500 focus:ring-2 cursor-pointer"
+                           onchange="toggleNotaAdicional()">
+                    <label for="check-nota-adicional" class="ml-3 text-lg font-bold text-orange-400 cursor-pointer">
+                        <i class="bi bi-sticky mr-2"></i>¿Agregar nota adicional?
+                    </label>
+                </div>
+                
+                <div id="campo-nota-adicional" class="hidden">
+                    <textarea id="nota-adicional-texto" 
+                              class="w-full px-4 py-3 bg-slate-800/50 border border-slate-600/30 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all resize-none"
+                              rows="3"
+                              maxlength="200"
+                              placeholder="Ejemplo: Sin cebolla, término medio, extra picante, etc."></textarea>
+                    <div class="flex items-center justify-between mt-2">
+                        <p class="text-xs text-slate-400">
+                            <i class="bi bi-info-circle mr-1"></i>Esta nota será visible en cocina y bar
+                        </p>
+                        <span id="contador-caracteres" class="text-xs text-slate-400">0/200</span>
+                    </div>
+                </div>
             </div>
         </div>
         

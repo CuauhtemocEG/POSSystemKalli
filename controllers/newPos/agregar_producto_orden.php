@@ -11,6 +11,7 @@ $producto_id = intval($_POST['producto_id'] ?? 0);
 $cantidad = intval($_POST['cantidad'] ?? 1);
 $orden_id = intval($_POST['orden_id'] ?? 0);
 $variedades_json = $_POST['variedades'] ?? null; // JSON de variedades seleccionadas
+$nota_adicional = trim($_POST['nota_adicional'] ?? ''); // Nota adicional del cliente
 
 if ($cantidad < 1 || !$producto_id || !$orden_id) {
     echo json_encode(['status'=>'error', 'msg'=>'Datos incompletos']);
@@ -77,12 +78,12 @@ try {
         $item_index = $count_stmt->fetchColumn();
         
         try {
+            $stmt = $pdo->prepare("INSERT INTO orden_productos (orden_id, producto_id, cantidad, item_index, preparado, cancelado, agregado_por_usuario_id, nota_adicional) VALUES (?, ?, ?, ?, 0, 0, ?, ?)");
+            $stmt->execute([$orden_id, $producto_id, $cantidad, $item_index, $usuario_id, $nota_adicional ?: null]);
+        } catch (Exception $e) {
+            // Si falla (por ejemplo, si la columna nota_adicional no existe), insertar solo campos básicos
             $stmt = $pdo->prepare("INSERT INTO orden_productos (orden_id, producto_id, cantidad, item_index, preparado, cancelado, agregado_por_usuario_id) VALUES (?, ?, ?, ?, 0, 0, ?)");
             $stmt->execute([$orden_id, $producto_id, $cantidad, $item_index, $usuario_id]);
-        } catch (Exception $e) {
-            // Si falla, insertar solo campos básicos
-            $stmt = $pdo->prepare("INSERT INTO orden_productos (orden_id, producto_id, cantidad) VALUES (?, ?, ?)");
-            $stmt->execute([$orden_id, $producto_id, $cantidad]);
         }
         
         $orden_producto_id = $pdo->lastInsertId();

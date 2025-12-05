@@ -332,6 +332,15 @@ function cargarCocina(showLoading = true) {
                         </div>
                       ` : ''}
                       
+                      ${item.nota_adicional && item.nota_adicional.trim() !== '' ? `
+                        <div class="mt-1.5 mb-1.5 pl-2 border-l-2 border-yellow-500/60 bg-yellow-500/10 rounded-r-lg pr-2 py-1">
+                          <p class="text-xs text-yellow-400 font-semibold mb-0.5 flex items-center">
+                            <i class="bi bi-sticky-fill mr-1"></i>Nota del cliente:
+                          </p>
+                          <p class="text-xs text-yellow-200 italic">${item.nota_adicional}</p>
+                        </div>
+                      ` : ''}
+                      
                       <div class="flex items-center space-x-2 mt-1">
                         <span class="inline-flex items-center px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded text-xs font-semibold">
                           <i class="bi bi-cart-fill mr-1 text-xs"></i>${cantidad}

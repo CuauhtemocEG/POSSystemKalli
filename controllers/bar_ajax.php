@@ -10,6 +10,7 @@ $detalles = $pdo->query(
             COALESCE(op.preparado, 0) as preparado, 
             COALESCE(op.cancelado, 0) as cancelado, 
             COALESCE(op.pendiente_cancelacion, 0) as pendiente_cancelacion,
+            COALESCE(op.nota_adicional, '') as nota_adicional,
             (COALESCE(op.cantidad, 0) - COALESCE(op.preparado, 0) - COALESCE(op.cancelado, 0) - COALESCE(op.pendiente_cancelacion, 0)) AS faltan,
             'normal' as tipo
      FROM orden_productos op
@@ -28,6 +29,7 @@ $detalles = $pdo->query(
             COALESCE(op.preparado, 0) as preparado, 
             COALESCE(op.cancelado, 0) as cancelado, 
             COALESCE(op.pendiente_cancelacion, 0) as pendiente_cancelacion,
+            COALESCE(op.nota_adicional, '') as nota_adicional,
             COALESCE(op.pendiente_cancelacion, 0) AS faltan,
             'pendiente_cancelacion' as tipo
      FROM orden_productos op
