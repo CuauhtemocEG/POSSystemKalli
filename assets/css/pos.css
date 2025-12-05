@@ -1,0 +1,14 @@
+.pos-container { display: flex; height: 90vh; }
+.pos-left { flex: 1; background: #f5f6fa; padding: 1em; display: flex; flex-direction: column; }
+.pos-right { flex: 2; background: #fff; padding: 1em; display: flex; flex-direction: column; }
+.pos-sale-list { flex: 1; overflow-y: auto; margin-bottom: 1em; }
+.pos-products { flex: 1; display: flex; flex-wrap: wrap; gap: 1em; overflow-y: auto; }
+.product-card { width: 140px; border: 1px solid #ddd; border-radius: 6px; padding: 0.5em; text-align: center; cursor: pointer; }
+.product-card img { width: 80px; height: 80px; object-fit: cover; border-radius: 4px; }
+.product-card .product-name { font-weight: bold; }
+.product-card .product-price { color: #27ae60; margin-top: 0.5em; }
+.pos-categories { display: flex; gap: 1em; margin-bottom: 1em; }
+.pos-categories button { border: none; background: #eee; padding: 0.5em 1em; border-radius: 4px; }
+.pos-categories button.active { background: #3498db; color: #fff; }
+.pos-summary { margin-bottom: 1em; }
+.pos-actions { display: flex; gap: 1em; }

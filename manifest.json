@@ -1,0 +1,102 @@
+{
+  "name": "Kalli Jaguar POS",
+  "short_name": "POS Kalli",
+  "description": "Sistema de Punto de Venta profesional para restaurantes y comercios",
+  "start_url": "./index.php",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#1e293b",
+  "orientation": "portrait-primary",
+  "scope": "./",
+  "lang": "es",
+  "dir": "ltr",
+  "categories": ["business", "productivity", "food"],
+  "icons": [
+    {
+      "src": "assets/icons/icon-72x72.png",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "assets/icons/icon-96x96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "assets/icons/icon-128x128.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "assets/icons/icon-144x144.png",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "assets/icons/icon-152x152.png",
+      "sizes": "152x152",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "assets/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "assets/icons/icon-384x384.png",
+      "sizes": "384x384",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "assets/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Mesas",
+      "short_name": "Mesas",
+      "description": "Ver y administrar mesas",
+      "url": "/POS/index.php?page=mesas",
+      "icons": [{ "src": "assets/icons/shortcut-mesas.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Productos",
+      "short_name": "Productos", 
+      "description": "Gestionar productos del menú",
+      "url": "/POS/index.php?page=productos",
+      "icons": [{ "src": "assets/icons/shortcut-productos.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Cocina",
+      "short_name": "Cocina",
+      "description": "Panel de cocina",
+      "url": "/POS/index.php?page=cocina", 
+      "icons": [{ "src": "assets/icons/shortcut-cocina.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Reportes",
+      "short_name": "Reportes",
+      "description": "Ver reportes y estadísticas",
+      "url": "/POS/index.php?page=reportes",
+      "icons": [{ "src": "assets/icons/shortcut-reportes.png", "sizes": "96x96" }]
+    }
+  ],
+  "related_applications": [],
+  "prefer_related_applications": false,
+  "edge_side_panel": {
+    "preferred_width": 400
+  },
+  "launch_handler": {
+    "client_mode": "navigate-new"
+  }
+}

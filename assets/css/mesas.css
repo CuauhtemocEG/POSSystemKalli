@@ -1,0 +1,62 @@
+body {
+      background: #f7f9fb;
+    }
+    .mesas-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1.5rem;
+      margin-top: 2rem;
+    }
+    .mesa-card {
+      background: #fff;
+      border: 2px solid #e4eaf3;
+      border-radius: 18px;
+      padding: 2em 1.2em 1em 1.2em;
+      text-align: center;
+      box-shadow: 0 2px 14px #dde3ed60;
+      position: relative;
+      transition: box-shadow 0.15s, border-color 0.15s;
+      cursor: pointer;
+      min-height: 170px;
+      user-select: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .mesa-card:hover {
+      box-shadow: 0 4px 24px #b2bec3;
+      border-color: #0d6efd;
+    }
+    .mesa-num {
+      font-size: 2em;
+      font-weight: bold;
+      color: #0d6efd;
+      margin-bottom: .25em;
+    }
+    .mesa-status {
+      font-size: 1.1em;
+      margin-bottom: 1em;
+    }
+    .badge-libre {
+      background: #1abc9c;
+      color: #fff;
+    }
+    .badge-ocupada {
+      background: #e74c3c;
+      color: #fff;
+    }
+    .mesa-btn {
+      width: 100%;
+      margin-top: 0.5em;
+    }
+    @media (max-width: 700px) {
+      .mesas-grid {
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 1rem;
+      }
+      .mesa-card {
+        padding: 1.2em .7em .7em .7em;
+        min-height: 130px;
+      }
+      .mesa-num { font-size: 1.3em;}
+    }

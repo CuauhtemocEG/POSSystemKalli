@@ -1,0 +1,148 @@
+body {
+            background: #f7f9fb;
+        }
+        .mesa-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1em;
+            flex-wrap: wrap;
+            margin-bottom: 1.5em;
+        }
+        .mesa-header .btn {
+            min-width: 120px;
+        }
+        .pos-container {
+            display: flex;
+            gap: 2em;
+            min-height: 450px;
+        }
+        .pos-left, .pos-right {
+            background: #fff;
+            border-radius: 14px;
+            box-shadow: 0 2px 14px #dde3ed60;
+            padding: 2em 1.2em 1em 1.2em;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+        .pos-left {
+            flex: 1.1;
+            min-width: 320px;
+        }
+        .pos-right {
+            flex: 2;
+            min-width: 300px;
+            transition: max-height 0.3s;
+        }
+        .toggle-productos-btn {
+            display: none;
+            margin-bottom: 1em;
+            font-size: 1.15em;
+        }
+        .pos-products {
+            flex: 1;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(160px,1fr));
+            gap: 1rem;
+            overflow-y: auto;
+        }
+        .product-card {
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 0.6em;
+            background: #f8fafd;
+            text-align: center;
+            transition: box-shadow 0.15s;
+            cursor: pointer;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .product-card:hover {
+            box-shadow: 0 2px 8px #b6b6b6;
+            background: #eef7ff;
+        }
+        .product-card img {
+            width: 80px; height: 80px;
+            object-fit: cover;
+            border-radius: 6px;
+            margin-bottom: .3em;
+        }
+        .product-card .product-name {
+            font-weight: bold;
+            font-size: 1em;
+        }
+        .product-card .product-price {
+            color: #27ae60;
+            font-weight: 500;
+            margin-top: 0.2em;
+        }
+        .pos-category-btn {
+            border: none;
+            background: #e8e8e8;
+            padding: 6px 18px;
+            border-radius: 4px;
+            margin-right: 8px;
+            font-weight: 500;
+        }
+        .pos-category-btn.active {
+            background: #0d6efd;
+            color: #fff;
+        }
+        .pos-sale-list {
+            flex: 1;
+            overflow-y: auto;
+            margin-bottom: 1.2em;
+        }
+        .pos-summary {
+            margin-bottom: 1em;
+            font-size: 1.08em;
+        }
+        .pos-actions {
+            display: flex;
+            gap: 0.7em;
+            flex-wrap: wrap;
+        }
+        .sale-item-qty {
+            width: 48px;
+            text-align: center;
+        }
+        .sale-item-remove {
+            color: #dc3545;
+            border: none;
+            background: none;
+            font-size: 1.15em;
+            margin-left: 9px;
+        }
+
+        @media (max-width: 1100px) {
+            .pos-container {
+                flex-direction: column;
+                gap: 1.3em;
+            }
+            .pos-left, .pos-right {
+                min-width: 0;
+                width: 100%;
+                padding: 1.2em 0.7em 0.7em 0.7em;
+            }
+        }
+        @media (max-width: 700px) {
+            .mesa-header h2 {
+                font-size: 1.2em;
+            }
+            .toggle-productos-btn {
+                display: block;
+            }
+            .pos-right {
+                max-height: 0;
+                overflow: hidden;
+                padding: 0 0.7em;
+            }
+            .pos-right.show {
+                max-height: 1000px;
+                padding: 1.2em 0.7em 0.7em 0.7em;
+                margin-bottom: 1.2em;
+            }
+        }
