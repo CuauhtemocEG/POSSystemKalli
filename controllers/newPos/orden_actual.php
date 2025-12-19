@@ -70,13 +70,16 @@ $stmt = $pdo->prepare("
         COALESCE(op.preparado, 0) as preparado,
         COALESCE(op.cancelado, 0) as cancelado,
         COALESCE(op.pendiente_cancelacion, 0) as pendiente_cancelacion,
+        COALESCE(op.confirmado, 1) as confirmado,
         COALESCE(op.item_index, 1) as item_index,
+        COALESCE(op.nota_adicional, '') as nota_adicional,
         p.precio,
+        p.categoria,
         (op.cantidad * p.precio) as subtotal_item
     FROM orden_productos op
     JOIN productos p ON op.producto_id = p.id
     WHERE op.orden_id = ? AND op.estado != 'eliminado'
-    ORDER BY op.id
+    ORDER BY op.confirmado ASC, op.id DESC
 ");
 $stmt->execute([$orden_id]);
 $productos = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -127,10 +130,13 @@ foreach ($productos as $producto) {
         'preparado' => $preparado,
         'cancelado' => $cancelado,
         'pendiente_cancelacion' => $pendiente_cancelacion,
+        'confirmado' => intval($producto['confirmado'] ?? 1),
         'precio' => $precio,
         'subtotal' => $subtotal_producto_activo, // Solo el subtotal de productos activos
         'item_index' => $item_index, // Incluir item_index
-        'variedades' => $variedades // Incluir variedades específicas de este item
+        'variedades' => $variedades, // Incluir variedades específicas de este item
+        'nota_adicional' => $producto['nota_adicional'] ?? '',
+        'categoria' => $producto['categoria'] ?? ''
     ];
 }
 

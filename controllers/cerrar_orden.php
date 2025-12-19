@@ -189,28 +189,39 @@ try {
             $stmt->execute([$orden_id]);
             $orden_data = $stmt->fetch();
             
-            // Obtener productos con cantidades no canceladas para impresión
+            // Obtener productos de la orden AGRUPADOS por producto (igual que imprimir_termica.php)
+            // Suma todas las cantidades del mismo producto (confirmado=1) menos las canceladas
             $stmt = $pdo->prepare("
                 SELECT 
+                    p.id,
                     p.nombre, 
-                    p.precio, 
-                    (op.cantidad - COALESCE(op.cancelado, 0)) as cantidad,
-                    op.preparado,
-                    op.cancelado
+                    p.precio,
+                    SUM(op.cantidad - COALESCE(op.cancelado, 0)) as cantidad
                 FROM orden_productos op 
                 JOIN productos p ON op.producto_id = p.id 
-                WHERE op.orden_id = ? 
-                  AND (op.cantidad - COALESCE(op.cancelado, 0)) > 0
+                WHERE op.orden_id = ?
+                  AND COALESCE(op.confirmado, 1) = 1
+                GROUP BY p.id, p.nombre, p.precio
+                HAVING SUM(op.cantidad - COALESCE(op.cancelado, 0)) > 0
+                ORDER BY p.nombre
             ");
             $stmt->execute([$orden_id]);
             $productos = $stmt->fetchAll();
             
-            // Obtener productos cancelados (cantidades canceladas)
+            // Obtener productos cancelados AGRUPADOS (cantidades canceladas)
             $stmt = $pdo->prepare("
-                SELECT p.nombre, p.precio, op.cancelado as cantidad
+                SELECT 
+                    p.id,
+                    p.nombre, 
+                    p.precio, 
+                    SUM(op.cancelado) as cantidad
                 FROM orden_productos op 
                 JOIN productos p ON op.producto_id = p.id 
-                WHERE op.orden_id = ? AND op.cancelado > 0
+                WHERE op.orden_id = ? 
+                  AND op.cancelado > 0
+                GROUP BY p.id, p.nombre, p.precio
+                HAVING SUM(op.cancelado) > 0
+                ORDER BY p.nombre
             ");
             $stmt->execute([$orden_id]);
             $productosCancelados = $stmt->fetchAll();

@@ -1057,16 +1057,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     throw new Exception('Orden no encontrada');
                 }
                 
-                // Obtener productos de la orden (productos con cantidades no canceladas - CORREGIDO)
+                // Obtener productos de la orden AGRUPADOS por producto
+                // Suma todas las cantidades del mismo producto (confirmado=1) menos las canceladas
                 $stmt = $pdo->prepare("
                     SELECT 
+                        p.id,
                         p.nombre, 
                         p.precio,
-                        (op.cantidad - COALESCE(op.cancelado, 0)) as cantidad
+                        SUM(op.cantidad - COALESCE(op.cancelado, 0)) as cantidad
                     FROM orden_productos op 
                     JOIN productos p ON op.producto_id = p.id 
-                    WHERE op.orden_id = ? 
-                      AND (op.cantidad - COALESCE(op.cancelado, 0)) > 0
+                    WHERE op.orden_id = ?
+                      AND COALESCE(op.confirmado, 1) = 1
+                    GROUP BY p.id, p.nombre, p.precio
+                    HAVING SUM(op.cantidad - COALESCE(op.cancelado, 0)) > 0
+                    ORDER BY p.nombre
                 ");
                 $stmt->execute([$input['orden_id']]);
                 $productos = $stmt->fetchAll();
@@ -1120,45 +1125,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $lineas = $impresora->dividirTextoParaTicket($totalTexto, 32);
                 foreach ($lineas as $linea) {
                     $impresora->texto($linea, 'center', false, 'normal');
-                    $impresora->saltoLinea();
                 }
-                
-                // Información del pago (siempre mostrar si la orden está cerrada)
-                if ($orden['estado'] === 'cerrada') {
-                    $impresora->linea('-', 45);
-                    $impresora->texto('METODO DE PAGO: ' . $impresora->formatearMetodoPago($orden['metodo_pago'] ?? 'efectivo'), 'left', true);
-                    
-                    if (($orden['metodo_pago'] === 'efectivo' || !isset($orden['metodo_pago'])) && isset($orden['dinero_recibido']) && $orden['dinero_recibido'] !== null) {
-                        $impresora->texto('Dinero recibido: $' . number_format($orden['dinero_recibido'], 2), 'left');
-                        
-                        if (isset($orden['cambio']) && $orden['cambio'] !== null && $orden['cambio'] > 0) {
-                            $impresora->texto('Cambio: $' . number_format($orden['cambio'], 2), 'left', true);
-                        } else {
-                            $impresora->texto('Pago exacto', 'left');
-                        }
-                    }
-                    $impresora->saltoLinea();
-                }
-                // Información del pago (si se proporciona desde parámetros - para compatibilidad)
-                elseif (isset($input['metodo_pago'])) {
-                    $impresora->linea('-', 45);
-                    $impresora->texto('METODO DE PAGO: ' . $impresora->formatearMetodoPago($input['metodo_pago']), 'left', true);
-                    
-                    if ($input['metodo_pago'] === 'efectivo' && isset($input['dinero_recibido'])) {
-                        $dineroRecibido = floatval($input['dinero_recibido']);
-                        $impresora->texto('Dinero recibido: $' . number_format($dineroRecibido, 2), 'left');
-                        
-                        if (isset($input['cambio'])) {
-                            $cambio = floatval($input['cambio']);
-                            if ($cambio > 0) {
-                                $impresora->texto('Cambio: $' . number_format($cambio, 2), 'left', true);
-                            } else {
-                                $impresora->texto('Pago exacto', 'left');
-                            }
-                        }
-                    }
-                    $impresora->saltoLinea();
-                }
+                $impresora->saltoLinea();
                 
                 // Obtener productos cancelados (si los hay)
                 // Agrupa por producto y suma las cantidades canceladas

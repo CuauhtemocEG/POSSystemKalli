@@ -18,6 +18,7 @@ $detalles = $pdo->query(
      JOIN mesas m ON o.mesa_id = m.id
      JOIN productos p ON op.producto_id = p.id
      WHERE p.categoria = 'bebidas' AND op.estado != 'eliminado'
+     AND COALESCE(op.confirmado, 1) = 1
      AND (COALESCE(op.cantidad, 0) - COALESCE(op.preparado, 0) - COALESCE(op.cancelado, 0) - COALESCE(op.pendiente_cancelacion, 0)) > 0
      AND o.estado='abierta'
      
@@ -37,6 +38,7 @@ $detalles = $pdo->query(
      JOIN mesas m ON o.mesa_id = m.id
      JOIN productos p ON op.producto_id = p.id
      WHERE p.categoria = 'bebidas' AND op.estado != 'eliminado'
+     AND COALESCE(op.confirmado, 1) = 1
      AND COALESCE(op.pendiente_cancelacion, 0) > 0
      AND o.estado='abierta'
      

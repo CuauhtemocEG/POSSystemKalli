@@ -1,4 +1,6 @@
 <div class="view-wide pt-20">
+<!-- Incluir sistema de notificaciones de sonido -->
+<script src="js/notification-sound.js"></script>
 <!-- Custom Styles for Enhanced Kitchen View -->
 <style>
   @keyframes slideInUp {
@@ -65,6 +67,52 @@
     break-inside: avoid;
     margin-bottom: 1.5rem;
   }
+  
+  /* Animaciones para nuevas órdenes */
+  @keyframes flash-bg {
+    0%, 100% {
+      background-color: transparent;
+    }
+    50% {
+      background-color: rgba(239, 68, 68, 0.1);
+    }
+  }
+  
+  @keyframes slide-in-right {
+    from {
+      transform: translateX(100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
+  
+  #nuevas-ordenes-alert-cocina {
+    animation: slide-in-right 0.5s ease-out;
+    cursor: pointer;
+    transition: all 0.3s ease;
+  }
+  
+  #nuevas-ordenes-alert-cocina:hover {
+    background: rgba(239, 68, 68, 0.3);
+    transform: scale(1.05);
+  }
+  
+  /* Badge pulsante más visible */
+  @keyframes pulse-scale {
+    0%, 100% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.2);
+    }
+  }
+  
+  #nuevas-ordenes-badge-cocina {
+    animation: pulse-scale 1s infinite;
+  }
 </style>
 
 <!-- Kitchen Status Cards - Compact Version -->
@@ -118,25 +166,30 @@
   </div>
 </div>
 
-<!-- Auto Refresh Control - Compact -->
+<!-- Auto Refresh Control - Compact with NEW Indicator -->
 <div class="mb-6">
   <div class="bg-dark-700/20 backdrop-blur-sm rounded-xl border border-dark-600/30 p-4">
     <div class="flex items-center justify-between flex-wrap gap-3">
       <div class="flex items-center space-x-3">
-        <div class="w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-600 rounded-lg flex items-center justify-center">
+        <div class="w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-600 rounded-lg flex items-center justify-center relative">
           <i class="bi bi-arrow-clockwise text-white text-sm"></i>
+          <span id="nuevas-ordenes-badge-cocina" class="hidden absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center animate-bounce">0</span>
         </div>
         <div>
           <h3 class="text-sm font-semibold text-white">Auto-actualización</h3>
-          <p class="text-gray-400 text-xs">Cada 30 segundos</p>
+          <p class="text-gray-400 text-xs">Cada <span id="refresh-interval-display-cocina">10</span> segundos</p>
         </div>
       </div>
       <div class="flex items-center space-x-3">
+        <div id="nuevas-ordenes-alert-cocina" class="hidden items-center space-x-2 bg-red-500/20 border border-red-500/50 px-3 py-1 rounded-lg animate-pulse">
+          <i class="bi bi-bell-fill text-red-400"></i>
+          <span class="text-red-400 text-xs font-bold">¡<span id="contador-nuevas-cocina">0</span> NUEVA(S) ORDEN(ES)!</span>
+        </div>
         <div class="flex items-center space-x-2">
           <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
           <span class="text-green-400 text-xs font-medium">En línea</span>
         </div>
-        <button onclick="cargarCocina()" 
+        <button onclick="cargarCocina(true)" 
                 class="px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold rounded-lg transition-all duration-200 transform hover:scale-105 text-sm shadow-lg">
           <i class="bi bi-arrow-clockwise mr-1"></i>
           Actualizar
@@ -162,6 +215,9 @@
 <script>
 let refreshInterval;
 let isUpdating = false;
+let mesasConocidas = new Set();
+let ultimaActualizacion = Date.now();
+let refreshIntervalTime = 10000; // 10 segundos para tiempo real
 
 function cargarCocina(showLoading = true) {
   // Evitar múltiples actualizaciones simultáneas
@@ -405,6 +461,42 @@ function cargarCocina(showLoading = true) {
 
       document.getElementById('cocina-content').innerHTML = html;
 
+      // Detectar nuevas órdenes y mostrar notificación visual
+      const mesasActuales = new Set(Object.keys(mesas));
+      let nuevasMesas = 0;
+      
+      if (mesasConocidas.size > 0) {
+        // Detectar mesas nuevas
+        mesasActuales.forEach(mesa => {
+          if (!mesasConocidas.has(mesa)) {
+            nuevasMesas++;
+          }
+        });
+        
+        // Si hay mesas nuevas, mostrar alerta visual
+        if (nuevasMesas > 0) {
+          mostrarAlertaNuevasOrdenesCocina(nuevasMesas);
+        }
+      }
+      
+      // Actualizar mesas conocidas
+      mesasConocidas = mesasActuales;
+
+      // Verificar y notificar nuevos productos con sonido
+      if (window.notificationSound) {
+        const productosParaNotificar = [];
+        for (const nombreMesa in mesas) {
+          const mesa = mesas[nombreMesa];
+          mesa.productos.forEach(producto => {
+            productosParaNotificar.push({
+              op_id: producto.op_id,
+              mesa_id: mesa.nombre
+            });
+          });
+        }
+        window.notificationSound.checkAndNotify(productosParaNotificar);
+      }
+
       // Add event listeners
       document.querySelectorAll('.marcar-preparado-form-cocina').forEach(form => {
         form.addEventListener('submit', function(e) {
@@ -559,11 +651,50 @@ function mostrarAlertaCancelaciones(productos) {
   });
 }
 
-// Auto refresh every 30 seconds
+// Función para mostrar alerta visual de nuevas órdenes
+function mostrarAlertaNuevasOrdenesCocina(cantidad) {
+  const badge = document.getElementById('nuevas-ordenes-badge-cocina');
+  const alert = document.getElementById('nuevas-ordenes-alert-cocina');
+  const contador = document.getElementById('contador-nuevas-cocina');
+  
+  // Actualizar contador
+  contador.textContent = cantidad;
+  badge.textContent = cantidad;
+  
+  // Mostrar elementos
+  badge.classList.remove('hidden');
+  alert.classList.remove('hidden');
+  alert.classList.add('flex');
+  
+  // Flash de fondo para llamar la atención
+  document.body.style.animation = 'flash-bg 0.5s ease-in-out 3';
+  
+  // Ocultar después de 30 segundos o al hacer click
+  setTimeout(() => {
+    ocultarAlertaNuevasOrdenesCocina();
+  }, 30000);
+  
+  // Permitir ocultar al hacer click en la alerta
+  alert.onclick = function() {
+    ocultarAlertaNuevasOrdenesCocina();
+  };
+}
+
+function ocultarAlertaNuevasOrdenesCocina() {
+  const badge = document.getElementById('nuevas-ordenes-badge-cocina');
+  const alert = document.getElementById('nuevas-ordenes-alert-cocina');
+  
+  badge.classList.add('hidden');
+  alert.classList.add('hidden');
+  alert.classList.remove('flex');
+  document.body.style.animation = '';
+}
+
+// Auto refresh cada 10 segundos para tiempo real
 function startAutoRefresh() {
   refreshInterval = setInterval(() => {
     cargarCocina(false); // Actualización automática sin loading
-  }, 30000);
+  }, refreshIntervalTime);
 }
 
 function stopAutoRefresh() {

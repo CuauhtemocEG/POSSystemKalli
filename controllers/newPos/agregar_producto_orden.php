@@ -78,12 +78,18 @@ try {
         $item_index = $count_stmt->fetchColumn();
         
         try {
-            $stmt = $pdo->prepare("INSERT INTO orden_productos (orden_id, producto_id, cantidad, item_index, preparado, cancelado, agregado_por_usuario_id, nota_adicional) VALUES (?, ?, ?, ?, 0, 0, ?, ?)");
+            $stmt = $pdo->prepare("INSERT INTO orden_productos (orden_id, producto_id, cantidad, item_index, preparado, cancelado, agregado_por_usuario_id, nota_adicional, confirmado) VALUES (?, ?, ?, ?, 0, 0, ?, ?, 0)");
             $stmt->execute([$orden_id, $producto_id, $cantidad, $item_index, $usuario_id, $nota_adicional ?: null]);
         } catch (Exception $e) {
-            // Si falla (por ejemplo, si la columna nota_adicional no existe), insertar solo campos básicos
-            $stmt = $pdo->prepare("INSERT INTO orden_productos (orden_id, producto_id, cantidad, item_index, preparado, cancelado, agregado_por_usuario_id) VALUES (?, ?, ?, ?, 0, 0, ?)");
-            $stmt->execute([$orden_id, $producto_id, $cantidad, $item_index, $usuario_id]);
+            // Si falla (por ejemplo, si la columna confirmado no existe), intentar sin ella
+            try {
+                $stmt = $pdo->prepare("INSERT INTO orden_productos (orden_id, producto_id, cantidad, item_index, preparado, cancelado, agregado_por_usuario_id, nota_adicional) VALUES (?, ?, ?, ?, 0, 0, ?, ?)");
+                $stmt->execute([$orden_id, $producto_id, $cantidad, $item_index, $usuario_id, $nota_adicional ?: null]);
+            } catch (Exception $e2) {
+                // Fallback final - solo campos básicos
+                $stmt = $pdo->prepare("INSERT INTO orden_productos (orden_id, producto_id, cantidad, item_index, preparado, cancelado, agregado_por_usuario_id) VALUES (?, ?, ?, ?, 0, 0, ?)");
+                $stmt->execute([$orden_id, $producto_id, $cantidad, $item_index, $usuario_id]);
+            }
         }
         
         $orden_producto_id = $pdo->lastInsertId();
@@ -107,30 +113,29 @@ try {
             ]);
         }
     } else {
-        // Producto SIN variedades - comportamiento original (agrupar si existe)
-        // Busca si ya existe en la orden Y NO está cancelado
-        $stmt = $pdo->prepare("
-            SELECT id, cantidad, COALESCE(cancelado, 0) as cancelado 
-            FROM orden_productos 
-            WHERE orden_id=? AND producto_id=? AND COALESCE(cancelado, 0) = 0
-        ");
-        $stmt->execute([$orden_id, $producto_id]);
-        $item = $stmt->fetch();
-
-        if ($item) {
-            // Producto existe y NO está cancelado - actualizar cantidad
-            $nuevo = $item['cantidad'] + $cantidad;
-            $pdo->prepare("UPDATE orden_productos SET cantidad=? WHERE id=?")
-                ->execute([$nuevo, $item['id']]);
-        } else {
-            // Producto no existe O está cancelado - crear nuevo registro con usuario
+        // Producto SIN variedades - SIEMPRE crear nuevo registro con confirmado=0
+        // NUNCA agrupar - cada adición requiere confirmación individual
+        
+        // Calcular item_index para productos sin variedades también
+        $count_stmt = $pdo->prepare("SELECT COALESCE(MAX(item_index), 0) + 1 as next_index 
+                                      FROM orden_productos 
+                                      WHERE orden_id = ? AND producto_id = ?");
+        $count_stmt->execute([$orden_id, $producto_id]);
+        $item_index = $count_stmt->fetchColumn();
+        
+        // SIEMPRE crear nuevo registro pendiente de confirmación
+        try {
+            $pdo->prepare("INSERT INTO orden_productos (orden_id, producto_id, cantidad, item_index, preparado, cancelado, agregado_por_usuario_id, nota_adicional, confirmado) VALUES (?, ?, ?, ?, 0, 0, ?, ?, 0)")
+                ->execute([$orden_id, $producto_id, $cantidad, $item_index, $usuario_id, $nota_adicional ?: null]);
+        } catch (Exception $e) {
+            // Si falla, intentar sin confirmado
             try {
-                $pdo->prepare("INSERT INTO orden_productos (orden_id, producto_id, cantidad, preparado, cancelado, agregado_por_usuario_id) VALUES (?, ?, ?, 0, 0, ?)")
-                    ->execute([$orden_id, $producto_id, $cantidad, $usuario_id]);
-            } catch (Exception $e) {
-                // Si falla, insertar solo campos básicos
-                $pdo->prepare("INSERT INTO orden_productos (orden_id, producto_id, cantidad) VALUES (?, ?, ?)")
-                    ->execute([$orden_id, $producto_id, $cantidad]);
+                $pdo->prepare("INSERT INTO orden_productos (orden_id, producto_id, cantidad, item_index, preparado, cancelado, agregado_por_usuario_id, nota_adicional) VALUES (?, ?, ?, ?, 0, 0, ?, ?)")
+                    ->execute([$orden_id, $producto_id, $cantidad, $item_index, $usuario_id, $nota_adicional ?: null]);
+            } catch (Exception $e2) {
+                // Fallback final - solo campos básicos con item_index
+                $pdo->prepare("INSERT INTO orden_productos (orden_id, producto_id, cantidad, item_index, preparado, cancelado, agregado_por_usuario_id) VALUES (?, ?, ?, ?, 0, 0, ?)")
+                    ->execute([$orden_id, $producto_id, $cantidad, $item_index, $usuario_id]);
             }
         }
     }

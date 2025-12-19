@@ -1029,6 +1029,139 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
             });
     }
 
+    /** 🔹 FUNCIONES DE CONFIRMACIÓN DE PRODUCTOS */
+    
+    function confirmarProductos(ids) {
+        Swal.fire({
+            title: '¿Confirmar productos?',
+            html: '<p class="mb-2">Los productos serán enviados a <strong>cocina/bar</strong> para su preparación.</p>' +
+                  '<p class="text-sm text-gray-400">Una vez confirmados, solo podrás cancelarlos con autorización del administrador.</p>',
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonText: '<i class="bi bi-check-circle mr-1"></i> Sí, confirmar',
+            cancelButtonText: 'No, esperar',
+            confirmButtonColor: '#10b981',
+            cancelButtonColor: '#6b7280'
+        }).then(function(result) {
+            if (result.isConfirmed) {
+                // Mostrar loading
+                Swal.fire({
+                    title: 'Confirmando productos...',
+                    html: 'Enviando a cocina/bar',
+                    allowOutsideClick: false,
+                    didOpen: () => {
+                        Swal.showLoading();
+                    }
+                });
+                
+                fetch('/POS/controllers/newPos/confirmar_productos.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: 'action=confirmar&orden_producto_ids=' + ids
+                })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'ok') {
+                        Swal.fire({
+                            icon: 'success',
+                            title: '¡Productos confirmados!',
+                            html: data.msg,
+                            timer: 2000,
+                            showConfirmButton: false
+                        });
+                        
+                        // Actualizar orden
+                        setTimeout(() => {
+                            console.log('🔄 Actualizando orden tras confirmación...');
+                            cargarOrden();
+                        }, 300);
+                    } else {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Error',
+                            text: data.msg || 'No se pudieron confirmar los productos'
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Error',
+                        text: 'Error de conexión al confirmar productos'
+                    });
+                });
+            }
+        });
+    }
+    
+    function cancelarProductosSinConfirmar(ids) {
+        Swal.fire({
+            title: '¿Cancelar productos?',
+            html: '<p class="mb-2">Los productos serán <strong>eliminados</strong> de la orden sin necesidad de autorización.</p>' +
+                  '<p class="text-sm text-gray-400">No se enviará ninguna notificación a cocina/bar.</p>',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: '<i class="bi bi-trash mr-1"></i> Sí, cancelar',
+            cancelButtonText: 'No',
+            confirmButtonColor: '#dc2626',
+            cancelButtonColor: '#6b7280'
+        }).then(function(result) {
+            if (result.isConfirmed) {
+                // Mostrar loading
+                Swal.fire({
+                    title: 'Cancelando productos...',
+                    allowOutsideClick: false,
+                    didOpen: () => {
+                        Swal.showLoading();
+                    }
+                });
+                
+                fetch('/POS/controllers/newPos/confirmar_productos.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: 'action=cancelar&orden_producto_ids=' + ids
+                })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'ok') {
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Productos cancelados',
+                            text: data.msg,
+                            timer: 2000,
+                            showConfirmButton: false
+                        });
+                        
+                        // Actualizar orden
+                        setTimeout(() => {
+                            console.log('🔄 Actualizando orden tras cancelación...');
+                            cargarOrden();
+                        }, 300);
+                    } else {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Error',
+                            text: data.msg || 'No se pudieron cancelar los productos'
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Error',
+                        text: 'Error de conexión al cancelar productos'
+                    });
+                });
+            }
+        });
+    }
+
     /** 🔹 FUNCIONES DE MODAL DE VARIEDADES */
     
     function abrirModalVariedades(producto) {
@@ -1637,8 +1770,108 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
                     return;
                 }
 
+                // Separar productos pendientes de confirmación y confirmados
+                let productosPendientes = data.items.filter(item => item.confirmado == 0);
+                let productosConfirmados = data.items.filter(item => item.confirmado == 1);
+
                 let html = '<div class="space-y-3">';
-                data.items.forEach(function(item) {
+                
+                // === SECCIÓN DE PRODUCTOS PENDIENTES DE CONFIRMACIÓN ===
+                if (productosPendientes.length > 0) {
+                    html += '<div class="bg-yellow-900/30 border-2 border-yellow-500/50 rounded-xl p-4 mb-4">';
+                    html += '<div class="flex items-center justify-between mb-3">';
+                    html += '<h4 class="text-yellow-300 font-bold flex items-center gap-2">';
+                    html += '<i class="bi bi-exclamation-triangle-fill animate-pulse"></i>';
+                    html += 'Productos Pendientes de Confirmación (' + productosPendientes.length + ')';
+                    html += '</h4>';
+                    html += '</div>';
+                    html += '<div class="text-yellow-200 text-sm mb-3">';
+                    html += '<i class="bi bi-info-circle mr-1"></i>';
+                    html += 'Estos productos aún NO han sido enviados a cocina/bar. Confirma o cancela antes de continuar.';
+                    html += '</div>';
+                    
+                    // Botones de acción global
+                    let pendientesIds = productosPendientes.map(p => p.id).join(',');
+                    html += '<div class="flex gap-2 mb-3">';
+                    html += '<button onclick="confirmarProductos(\'' + pendientesIds + '\')" ';
+                    html += 'class="flex-1 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white py-2 px-4 rounded-lg font-semibold transition-all shadow-lg">';
+                    html += '<i class="bi bi-check-circle mr-2"></i>Confirmar Todos';
+                    html += '</button>';
+                    html += '<button onclick="cancelarProductosSinConfirmar(\'' + pendientesIds + '\')" ';
+                    html += 'class="flex-1 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white py-2 px-4 rounded-lg font-semibold transition-all shadow-lg">';
+                    html += '<i class="bi bi-x-circle mr-2"></i>Cancelar Todos';
+                    html += '</button>';
+                    html += '</div>';
+                    
+                    // Lista de productos pendientes
+                    html += '<div class="space-y-2">';
+                    productosPendientes.forEach(function(item) {
+                        let subtotal = item.precio * item.cantidad;
+                        
+                        html += '<div class="bg-slate-800/60 rounded-lg p-3 border border-yellow-500/30">';
+                        html += '<div class="flex justify-between items-start mb-2">';
+                        html += '<div class="flex-1">';
+                        html += '<h5 class="text-white font-semibold">' + item.nombre + '</h5>';
+                        
+                        // Mostrar categoría
+                        let categoriaIcon = item.categoria === 'bebidas' ? 'cup-straw' : 'egg-fried';
+                        let categoriaColor = item.categoria === 'bebidas' ? 'text-cyan-400' : 'text-orange-400';
+                        html += '<div class="text-xs ' + categoriaColor + ' mt-1">';
+                        html += '<i class="bi bi-' + categoriaIcon + ' mr-1"></i>' + (item.categoria || 'Sin categoría');
+                        html += '</div>';
+                        
+                        // Mostrar variedades
+                        if (item.variedades && item.variedades.length > 0) {
+                            html += '<div class="mt-2 pl-2 border-l-2 border-yellow-500/40">';
+                            item.variedades.forEach(function(v) {
+                                html += '<div class="text-xs text-yellow-200">';
+                                html += '<i class="bi bi-arrow-return-right text-yellow-400 mr-1"></i>';
+                                html += '<span class="font-semibold">' + v.grupo_nombre + ':</span> ' + v.opcion_nombre;
+                                if (v.precio_adicional > 0) {
+                                    html += ' <span class="text-green-400">(+$' + parseFloat(v.precio_adicional).toFixed(2) + ')</span>';
+                                }
+                                html += '</div>';
+                            });
+                            html += '</div>';
+                        }
+                        
+                        // Mostrar nota adicional
+                        if (item.nota_adicional && item.nota_adicional.trim() !== '') {
+                            html += '<div class="mt-2 p-2 bg-yellow-500/10 border border-yellow-500/30 rounded">';
+                            html += '<div class="text-xs text-yellow-200 flex items-start gap-1">';
+                            html += '<i class="bi bi-sticky mt-0.5"></i>';
+                            html += '<span><strong>Nota:</strong> ' + item.nota_adicional + '</span>';
+                            html += '</div>';
+                            html += '</div>';
+                        }
+                        
+                        html += '</div>';
+                        html += '<div class="text-right">';
+                        html += '<div class="text-yellow-300 font-bold mb-1">$' + subtotal.toFixed(2) + '</div>';
+                        html += '<div class="text-slate-400 text-xs">x' + item.cantidad + '</div>';
+                        html += '</div>';
+                        html += '</div>';
+                        
+                        // Botones individuales
+                        html += '<div class="flex gap-2 mt-2">';
+                        html += '<button onclick="confirmarProductos(\'' + item.id + '\')" ';
+                        html += 'class="flex-1 bg-green-600 hover:bg-green-700 text-white py-1.5 px-3 rounded text-sm font-medium transition-colors">';
+                        html += '<i class="bi bi-check-lg mr-1"></i>Confirmar';
+                        html += '</button>';
+                        html += '<button onclick="cancelarProductosSinConfirmar(\'' + item.id + '\')" ';
+                        html += 'class="flex-1 bg-red-600 hover:bg-red-700 text-white py-1.5 px-3 rounded text-sm font-medium transition-colors">';
+                        html += '<i class="bi bi-x-lg mr-1"></i>Cancelar';
+                        html += '</button>';
+                        html += '</div>';
+                        
+                        html += '</div>';
+                    });
+                    html += '</div>';
+                    html += '</div>';
+                }
+                
+                // === SECCIÓN DE PRODUCTOS CONFIRMADOS ===
+                productosConfirmados.forEach(function(item) {
                     let subtotal = item.precio * item.cantidad;
                     let isCancelado = item.cancelado == 1;
                     let preparado = parseInt(item.preparado || 0);
@@ -2761,6 +2994,8 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
 
 <!-- Incluir sistema de impresión térmica -->
 <script src="js/impresion-termica.js"></script>
+<!-- Incluir sistema de notificaciones de sonido -->
+<script src="js/notification-sound.js"></script>
 <script>
     // Hacer disponible la configuración de impresora para JavaScript
     window.configImpresoraNombre = '<?= $config_impresion['nombre_impresora'] ?? '' ?>';

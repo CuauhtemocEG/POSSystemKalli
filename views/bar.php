@@ -1,4 +1,6 @@
 <div class="view-wide pt-20">
+<!-- Incluir sistema de notificaciones de sonido -->
+<script src="js/notification-sound.js"></script>
 <!-- Custom Styles for Enhanced Bar View -->
 <style>
   @keyframes slideInUp {
@@ -404,6 +406,22 @@ function cargarBar(showLoading = true) {
       }
 
       document.getElementById('bar-content').innerHTML = html;
+
+      // Verificar y notificar nuevos productos
+      if (window.notificationSound) {
+        // Crear array de productos para notificación
+        const productosParaNotificar = [];
+        for (const nombreMesa in mesas) {
+          const mesa = mesas[nombreMesa];
+          mesa.productos.forEach(producto => {
+            productosParaNotificar.push({
+              op_id: producto.op_id,
+              mesa_id: mesa.nombre
+            });
+          });
+        }
+        window.notificationSound.checkAndNotify(productosParaNotificar);
+      }
 
       // Add event listeners
       document.querySelectorAll('.marcar-preparado-form-bar').forEach(form => {

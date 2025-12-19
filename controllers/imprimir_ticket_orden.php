@@ -40,12 +40,22 @@ function imprimirTicketOrden($orden_id) {
             return ['success' => false, 'message' => 'Orden no encontrada'];
         }
         
-        // Obtener productos de la orden
+        // Obtener productos de la orden AGRUPADOS por producto
+        // Suma todas las cantidades del mismo producto (confirmado=1) menos las canceladas
         $stmt = $GLOBALS['pdo']->prepare("
-            SELECT op.cantidad, p.precio as precio_unitario, (op.cantidad * p.precio) as subtotal, p.nombre 
+            SELECT 
+                p.id,
+                p.nombre,
+                p.precio as precio_unitario,
+                SUM(op.cantidad - COALESCE(op.cancelado, 0)) as cantidad,
+                (SUM(op.cantidad - COALESCE(op.cancelado, 0)) * p.precio) as subtotal
             FROM orden_productos op 
             JOIN productos p ON op.producto_id = p.id 
             WHERE op.orden_id = ?
+              AND COALESCE(op.confirmado, 1) = 1
+            GROUP BY p.id, p.nombre, p.precio
+            HAVING SUM(op.cantidad - COALESCE(op.cancelado, 0)) > 0
+            ORDER BY p.nombre
         ");
         $stmt->execute([$orden_id]);
         $productos = $stmt->fetchAll();

@@ -19,16 +19,20 @@ $stmt = $pdo->prepare(
 $stmt->execute([$orden_id]);
 $orden = $stmt->fetch();
 
-// Productos (solo productos con cantidades no canceladas - IGUAL que ticket térmico)
+// Productos AGRUPADOS (solo productos confirmados con cantidades no canceladas)
 $detalles = $pdo->prepare(
     "SELECT 
+        p.id,
         p.nombre, 
         p.precio,
-        (op.cantidad - COALESCE(op.cancelado, 0)) as cantidad
+        SUM(op.cantidad - COALESCE(op.cancelado, 0)) as cantidad
      FROM orden_productos op 
      JOIN productos p ON op.producto_id = p.id 
-     WHERE op.orden_id=? 
-       AND (op.cantidad - COALESCE(op.cancelado, 0)) > 0"
+     WHERE op.orden_id=?
+       AND COALESCE(op.confirmado, 1) = 1
+     GROUP BY p.id, p.nombre, p.precio
+     HAVING SUM(op.cantidad - COALESCE(op.cancelado, 0)) > 0
+     ORDER BY p.nombre"
 );
 $detalles->execute([$orden_id]);
 $productos = $detalles->fetchAll();
