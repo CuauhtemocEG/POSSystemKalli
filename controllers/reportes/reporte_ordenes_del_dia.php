@@ -326,6 +326,72 @@ class ReporteOrdenesDelDia extends FPDF {
         $this->Cell(95, 12, limpiarTexto('Total de ventas ' . $periodo_texto . ':'), 1, 0, 'L', true);
         $this->Cell(95, 12, '$' . number_format($total_del_dia, 2), 1, 1, 'R', true);
     }
+    
+    // Sección de Productos Cancelados
+    function SeccionCancelados() {
+        $this->Ln(10);
+        
+        // Título de sección
+        $this->SetFillColor(231, 76, 60);
+        $this->SetTextColor(255, 255, 255);
+        $this->SetFont('Arial', 'B', 12);
+        $this->Cell(0, 10, limpiarTexto('PRODUCTOS CANCELADOS'), 1, 1, 'C', true);
+    }
+    
+    // Encabezado de tabla de cancelados
+    function TablaCanceladosHeader() {
+        $this->SetFillColor(231, 76, 60);
+        $this->SetTextColor(255, 255, 255);
+        $this->SetFont('Arial', 'B', 10);
+        
+        $this->Cell(15, 10, '#', 1, 0, 'C', true);
+        $this->Cell(70, 10, 'Producto', 1, 0, 'L', true);
+        $this->Cell(25, 10, 'Cantidad', 1, 0, 'C', true);
+        $this->Cell(25, 10, 'Precio Unit.', 1, 0, 'C', true);
+        $this->Cell(25, 10, 'Subtotal', 1, 0, 'C', true);
+        $this->Cell(30, 10, 'Tipo', 1, 1, 'C', true);
+        
+        $this->SetTextColor(44, 62, 80);
+    }
+    
+    // Fila de datos cancelados
+    function TablaFilaCancelados($num, $producto, $cantidad, $precio, $subtotal, $tipo, $isEven = false) {
+        $this->SetFont('Arial', '', 9);
+        
+        // Color alternado para las filas
+        if ($isEven) {
+            $this->SetFillColor(248, 249, 250);
+        } else {
+            $this->SetFillColor(255, 255, 255);
+        }
+        
+        // Limpiar texto para compatibilidad con PDF
+        $producto = limpiarTexto($producto);
+        $tipo = limpiarTexto($tipo);
+        
+        $this->Cell(15, 8, $num, 1, 0, 'C', true);
+        $this->Cell(70, 8, substr($producto, 0, 32), 1, 0, 'L', true);
+        $this->Cell(25, 8, number_format($cantidad), 1, 0, 'C', true);
+        $this->Cell(25, 8, '$' . number_format($precio, 2), 1, 0, 'R', true);
+        $this->Cell(25, 8, '$' . number_format($subtotal, 2), 1, 0, 'R', true);
+        $this->Cell(30, 8, substr($tipo, 0, 15), 1, 1, 'C', true);
+    }
+    
+    // Resumen de cancelados
+    function ResumenCancelados($total_cancelados, $total_perdido) {
+        $this->Ln(5);
+        
+        $this->SetFillColor(236, 240, 241);
+        $this->SetTextColor(44, 62, 80);
+        $this->SetFont('Arial', 'B', 10);
+        
+        $this->Cell(95, 8, 'Total de productos cancelados:', 1, 0, 'L', true);
+        $this->Cell(95, 8, number_format($total_cancelados) . ' unidades', 1, 1, 'R', true);
+        
+        $this->Cell(95, 8, limpiarTexto('Total en cancelaciones:'), 1, 0, 'L', true);
+        $this->SetTextColor(231, 76, 60);
+        $this->Cell(95, 8, '$' . number_format($total_perdido, 2), 1, 1, 'R', true);
+    }
 }
 
 // Obtener datos de órdenes del día
@@ -376,6 +442,29 @@ try {
     $stmt_metodos = $pdo->prepare($query_metodos);
     $stmt_metodos->execute();
     $resumen_metodos = $stmt_metodos->fetchAll(PDO::FETCH_ASSOC);
+    
+    // Consulta de productos CANCELADOS
+    $query_cancelados = "
+        SELECT 
+            p.nombre,
+            p.precio,
+            t.nombre as tipo,
+            SUM(op.cantidad) as total_cancelados,
+            SUM(op.cantidad * p.precio) as total_perdido
+        FROM orden_productos op
+        INNER JOIN productos p ON op.producto_id = p.id
+        INNER JOIN type t ON p.type = t.id
+        INNER JOIN ordenes o ON op.orden_id = o.id
+        WHERE o.estado = 'cerrada'
+        AND op.cancelado = 1
+        $condicionFecha
+        GROUP BY p.id, p.nombre, p.precio, t.nombre
+        ORDER BY total_cancelados DESC
+    ";
+    
+    $stmt_cancelados = $pdo->prepare($query_cancelados);
+    $stmt_cancelados->execute();
+    $productos_cancelados = $stmt_cancelados->fetchAll(PDO::FETCH_ASSOC);
     
     // Calcular totales
     $total_ordenes = count($ordenes);
@@ -438,6 +527,48 @@ try {
         
         // Resumen final
         $pdf->ResumenFinal($total_ordenes, $total_del_dia, $promedio_venta, $textoPeriodo);
+        
+        // ===== SECCIÓN DE PRODUCTOS CANCELADOS =====
+        if (!empty($productos_cancelados)) {
+            // Verificar si necesitamos una nueva página
+            if ($pdf->GetY() > 200) {
+                $pdf->AddPage();
+            }
+            
+            $pdf->SeccionCancelados();
+            $pdf->TablaCanceladosHeader();
+            
+            $total_cancelados = 0;
+            $total_perdido = 0;
+            $contador_cancelados = 1;
+            
+            foreach ($productos_cancelados as $index => $producto) {
+                $isEven = ($index % 2 == 0);
+                
+                $pdf->TablaFilaCancelados(
+                    $contador_cancelados,
+                    $producto['nombre'],
+                    $producto['total_cancelados'],
+                    $producto['precio'],
+                    $producto['total_perdido'],
+                    $producto['tipo'],
+                    $isEven
+                );
+                
+                $total_cancelados += $producto['total_cancelados'];
+                $total_perdido += $producto['total_perdido'];
+                $contador_cancelados++;
+                
+                // Verificar si necesitamos una nueva página
+                if ($pdf->GetY() > 250) {
+                    $pdf->AddPage();
+                    $pdf->TablaCanceladosHeader();
+                }
+            }
+            
+            // Resumen de cancelados
+            $pdf->ResumenCancelados($total_cancelados, $total_perdido);
+        }
     }
     
     // === CONFIGURAR HEADERS PARA DESCARGA FORZADA ===

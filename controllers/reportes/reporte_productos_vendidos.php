@@ -178,6 +178,49 @@ class ReporteProductosVendidos extends FPDF {
         $this->Cell(95, 8, '$' . number_format($total_ventas, 2), 1, 1, 'R', true);
     }
     
+    // Sección de Productos Cancelados
+    function SeccionCancelados() {
+        $this->Ln(10);
+        
+        // Título de sección
+        $this->SetFillColor(231, 76, 60);
+        $this->SetTextColor(255, 255, 255);
+        $this->SetFont('Arial', 'B', 12);
+        $this->Cell(0, 10, limpiarTexto('PRODUCTOS CANCELADOS'), 1, 1, 'C', true);
+    }
+    
+    // Encabezado de tabla de cancelados
+    function TablaCanceladosHeader() {
+        $this->SetFillColor(231, 76, 60);
+        $this->SetTextColor(255, 255, 255);
+        $this->SetFont('Arial', 'B', 10);
+        
+        $this->Cell(15, 10, '#', 1, 0, 'C', true);
+        $this->Cell(70, 10, 'Producto', 1, 0, 'L', true);
+        $this->Cell(25, 10, 'Cantidad', 1, 0, 'C', true);
+        $this->Cell(25, 10, 'Precio Unit.', 1, 0, 'C', true);
+        $this->Cell(25, 10, 'Subtotal', 1, 0, 'C', true);
+        $this->Cell(30, 10, 'Tipo', 1, 1, 'C', true);
+        
+        $this->SetTextColor(44, 62, 80);
+    }
+    
+    // Resumen de cancelados
+    function ResumenCancelados($total_cancelados, $total_perdido, $periodo_texto) {
+        $this->Ln(5);
+        
+        $this->SetFillColor(236, 240, 241);
+        $this->SetTextColor(44, 62, 80);
+        $this->SetFont('Arial', 'B', 10);
+        
+        $this->Cell(95, 8, 'Total de productos cancelados:', 1, 0, 'L', true);
+        $this->Cell(95, 8, number_format($total_cancelados) . ' unidades', 1, 1, 'R', true);
+        
+        $this->Cell(95, 8, limpiarTexto('Total en cancelaciones:'), 1, 0, 'L', true);
+        $this->SetTextColor(231, 76, 60);
+        $this->Cell(95, 8, '$' . number_format($total_perdido, 2), 1, 1, 'R', true);
+    }
+    
     // Corte de Caja
     function CorteDeCaja($efectivo, $debito, $credito, $transferencia, $tarjeta) {
         $this->Ln(8);
@@ -270,6 +313,28 @@ try {
     $stmt->execute();
     $productos = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
+    // Consulta de productos CANCELADOS
+    $queryCancelados = "        SELECT 
+            p.nombre,
+            p.precio,
+            t.nombre as tipo,
+            SUM(op.cantidad) as total_cancelados,
+            SUM(op.cantidad * p.precio) as total_perdido
+        FROM orden_productos op
+        INNER JOIN productos p ON op.producto_id = p.id
+        INNER JOIN type t ON p.type = t.id
+        INNER JOIN ordenes o ON op.orden_id = o.id
+        WHERE o.estado = 'cerrada'
+        AND op.cancelado = 1
+        $condicionFecha
+        GROUP BY p.id, p.nombre, p.precio, t.nombre
+        ORDER BY total_cancelados DESC
+    ";
+    
+    $stmtCancelados = $pdo->prepare($queryCancelados);
+    $stmtCancelados->execute();
+    $productosCancelados = $stmtCancelados->fetchAll(PDO::FETCH_ASSOC);
+    
     // Crear el PDF
     $pdf = new ReporteProductosVendidos($textoPeriodo);
     $pdf->AliasNbPages();
@@ -322,6 +387,48 @@ try {
         // Corte de Caja (solo si hay datos de métodos de pago)
         if ($efectivo > 0 || $debito > 0 || $credito > 0 || $transferencia > 0 || $tarjeta > 0) {
             $pdf->CorteDeCaja($efectivo, $debito, $credito, $transferencia, $tarjeta);
+        }
+        
+        // ===== SECCIÓN DE PRODUCTOS CANCELADOS =====
+        if (!empty($productosCancelados)) {
+            // Verificar si necesitamos una nueva página
+            if ($pdf->GetY() > 200) {
+                $pdf->AddPage();
+            }
+            
+            $pdf->SeccionCancelados();
+            $pdf->TablaCanceladosHeader();
+            
+            $total_cancelados = 0;
+            $total_perdido = 0;
+            $contador_cancelados = 1;
+            
+            foreach ($productosCancelados as $index => $producto) {
+                $isEven = ($index % 2 == 0);
+                
+                $pdf->TablaFila(
+                    $contador_cancelados,
+                    $producto['nombre'],
+                    $producto['total_cancelados'],
+                    $producto['precio'],
+                    $producto['total_perdido'],
+                    $producto['tipo'],
+                    $isEven
+                );
+                
+                $total_cancelados += $producto['total_cancelados'];
+                $total_perdido += $producto['total_perdido'];
+                $contador_cancelados++;
+                
+                // Verificar si necesitamos una nueva página
+                if ($pdf->GetY() > 250) {
+                    $pdf->AddPage();
+                    $pdf->TablaCanceladosHeader();
+                }
+            }
+            
+            // Resumen de cancelados
+            $pdf->ResumenCancelados($total_cancelados, $total_perdido, $textoPeriodo);
         }
     }
     
