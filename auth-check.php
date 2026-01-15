@@ -29,6 +29,7 @@ if (!isset($_SESSION['user_data']) && (!isset($_SESSION['authenticated']) || !$_
             'mesas' => ['ver' => true, 'crear' => true, 'editar' => true, 'eliminar' => true],
             'ordenes' => ['ver' => true, 'crear' => true, 'editar' => true, 'eliminar' => true],
             'productos' => ['ver' => true, 'crear' => true, 'editar' => true, 'eliminar' => true],
+            'promociones' => ['ver' => true, 'crear' => true, 'editar' => true, 'eliminar' => true],
             'reportes' => ['ver' => true, 'crear' => true, 'editar' => true, 'eliminar' => true, 'exportar' => true],
             'cocina' => ['ver' => true, 'crear' => true, 'editar' => true, 'eliminar' => true],
             'bar' => ['ver' => true, 'crear' => true, 'editar' => true, 'eliminar' => true],
@@ -87,6 +88,7 @@ function hasPermission($module, $action = 'ver') {
             'cocina' => ['ver', 'crear', 'editar', 'eliminar'],
             'bar' => ['ver', 'crear', 'editar', 'eliminar'],
             'configuracion' => ['ver', 'crear', 'editar', 'eliminar'],
+            'promociones' => ['ver', 'crear', 'editar', 'eliminar'],
             'usuarios' => ['ver', 'crear', 'editar', 'eliminar']
         ],
         'mesero' => [

@@ -5,8 +5,9 @@ $pdo = conexion();
 $producto_id = intval($_POST['producto_id'] ?? 0);
 $cantidad = intval($_POST['cantidad'] ?? 1);
 $orden_id = intval($_POST['orden_id'] ?? 0);
+$orden_producto_id = intval($_POST['orden_producto_id'] ?? 0); // ID del registro en orden_productos
 
-if (!$producto_id || !$orden_id) {
+if ((!$producto_id && !$orden_producto_id) || !$orden_id) {
     echo json_encode(['status'=>'error', 'msg'=>'Datos incompletos']);
     exit;
 }
@@ -44,12 +45,26 @@ function actualizarTotalOrden($pdo, $orden_id) {
 try {
     if ($cantidad <= 0) {
         // Eliminar producto de la orden
-        $stmt = $pdo->prepare("DELETE FROM orden_productos WHERE orden_id=? AND producto_id=?");
-        $stmt->execute([$orden_id, $producto_id]);
+        // Si viene orden_producto_id, usar ese ID específico (más preciso)
+        if ($orden_producto_id > 0) {
+            $stmt = $pdo->prepare("DELETE FROM orden_productos WHERE id = ? AND orden_id = ?");
+            $stmt->execute([$orden_producto_id, $orden_id]);
+        } else {
+            // Fallback: usar producto_id (modo legacy)
+            $stmt = $pdo->prepare("DELETE FROM orden_productos WHERE orden_id=? AND producto_id=?");
+            $stmt->execute([$orden_id, $producto_id]);
+        }
     } else {
         // Actualizar cantidad
-        $stmt = $pdo->prepare("UPDATE orden_productos SET cantidad=? WHERE orden_id=? AND producto_id=?");
-        $stmt->execute([$cantidad, $orden_id, $producto_id]);
+        // Priorizar orden_producto_id si está disponible
+        if ($orden_producto_id > 0) {
+            $stmt = $pdo->prepare("UPDATE orden_productos SET cantidad=? WHERE id=? AND orden_id=?");
+            $stmt->execute([$cantidad, $orden_producto_id, $orden_id]);
+        } else {
+            // Fallback: usar producto_id
+            $stmt = $pdo->prepare("UPDATE orden_productos SET cantidad=? WHERE orden_id=? AND producto_id=?");
+            $stmt->execute([$cantidad, $orden_id, $producto_id]);
+        }
     }
 
     // Actualizar el total de la orden

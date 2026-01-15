@@ -1,9 +1,4 @@
 <?php
-/**
- * Products API Controller
- * Provides JSON endpoints for product data
- */
-
 // Suprimir warnings y notices para respuestas JSON limpias
 error_reporting(E_ERROR | E_PARSE);
 ini_set('display_errors', 0);

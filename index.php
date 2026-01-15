@@ -24,6 +24,10 @@ switch ($page) {
             $page = 'error-403';
         }
         break;
+    case 'promociones':
+        if (!hasPermission('promociones', 'ver')) {
+            $page = 'error-403';
+        }
     case 'ordenes':
         if (!hasPermission('ordenes', 'ver')) {
             $page = 'error-403';
@@ -81,6 +85,13 @@ switch ($page) {
     case 'productos':
         if (hasPermission('productos', 'ver')) {
             include 'views/productos.php';
+        } else {
+            include 'views/error-403.php';
+        }
+        break;
+    case 'promociones':
+        if (hasPermission('promociones', 'ver')) {
+            include 'views/promociones.php';
         } else {
             include 'views/error-403.php';
         }

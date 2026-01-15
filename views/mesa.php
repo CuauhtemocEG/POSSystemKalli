@@ -2311,7 +2311,7 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
                     document.querySelectorAll('.sale-item-remove').forEach(function(btn) {
                         btn.onclick = function() {
                             const button = this;
-                            const productoId = this.getAttribute('data-id');
+                            const ordenProductoId = this.getAttribute('data-id');
 
                             Swal.fire({
                                 title: '¿Eliminar producto?',
@@ -2328,7 +2328,7 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
                                     fetch('/POS/controllers/newPos/actualizar_producto_orden.php', {
                                         method: 'POST',
                                         body: new URLSearchParams({
-                                            producto_id: productoId,
+                                            orden_producto_id: ordenProductoId,
                                             cantidad: 0,
                                             orden_id: ordenId
                                         }),

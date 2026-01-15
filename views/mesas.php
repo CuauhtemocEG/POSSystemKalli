@@ -12,7 +12,8 @@ $mesas = $pdo->query("
        FROM ordenes o 
        LEFT JOIN usuarios u ON o.usuario_id = u.id
        WHERE o.mesa_id = m.id AND o.estado = 'abierta' 
-       LIMIT 1) as mesero_nombre
+       LIMIT 1) as mesero_nombre,
+      (SELECT o.total FROM ordenes o WHERE o.mesa_id = m.id AND o.estado = 'abierta' ORDER BY o.id DESC LIMIT 1) as orden_total
     FROM mesas m
     ORDER BY m.nombre
 ")->fetchAll(PDO::FETCH_ASSOC);
@@ -464,8 +465,8 @@ document.addEventListener('DOMContentLoaded', function() {
           </div>
           <?php if ($mesa['orden_abierta'] > 0): ?>
             <div class="flex items-center justify-between text-base mt-2">
-              <span class="text-gray-400">Órdenes activas:</span>
-              <span class="text-red-400 font-bold text-lg"><?= $mesa['orden_abierta'] ?></span>
+              <span class="text-gray-400">Total de la Orden:</span>
+              <span class="text-red-400 font-bold text-lg">$<?= $mesa['orden_total'] ?></span>
             </div>
             <?php if (!empty($mesa['mesero_nombre']) && trim($mesa['mesero_nombre']) !== ''): ?>
             <div class="flex items-center justify-between text-base mt-2">
