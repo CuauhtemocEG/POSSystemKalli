@@ -2392,7 +2392,122 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
                     '<i class="bi bi-exclamation-triangle text-4xl mb-3"></i>' +
                     '<p>Error al cargar la orden</p>' +
                     '</div>';
+            })
+            .finally(function() {
+                // Calcular promociones después de cargar la orden
+                setTimeout(function() {
+                    calcularYMostrarPromociones();
+                }, 300);
             });
+    }
+
+    /** 🎁 Variables y funciones para promociones */
+    let promocionesActivas = [];
+    let totalDescuentosPromociones = 0;
+
+    function calcularYMostrarPromociones() {
+        const esPersonal = document.getElementById('esPersonal')?.checked || false;
+        
+        // Mostrar/ocultar badge de personal
+        const badge = document.getElementById('badgeDescuentoPersonal');
+        if (badge) {
+            if (esPersonal) {
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
+        }
+        
+        fetch('/POS/api/promotionsController/calcular_orden.php', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: 'orden_id=' + ordenId + '&es_personal=' + (esPersonal ? 1 : 0)
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+            if (data.status === 'ok') {
+                promocionesActivas = data.promociones || [];
+                totalDescuentosPromociones = data.total_descuentos || 0;
+                
+                if (data.tiene_promociones) {
+                    console.log('🎉 Promociones aplicadas:', promocionesActivas.length);
+                    mostrarPromocionesEnResumen();
+                } else {
+                    // Limpiar si no hay promociones
+                    const promoContainer = document.getElementById('promociones-aplicadas-container');
+                    if (promoContainer) {
+                        promoContainer.innerHTML = '';
+                    }
+                }
+            }
+        })
+        .catch(function(err) {
+            console.error('❌ Error al calcular promociones:', err);
+            promocionesActivas = [];
+            totalDescuentosPromociones = 0;
+        });
+    }
+
+    function mostrarPromocionesEnResumen() {
+        if (promocionesActivas.length === 0) return;
+        
+        // Buscar o crear contenedor de promociones
+        let promoContainer = document.getElementById('promociones-aplicadas-container');
+        
+        if (!promoContainer) {
+            // Crear contenedor después de totales
+            const totalesContainer = document.getElementById('orden-totales');
+            if (totalesContainer) {
+                promoContainer = document.createElement('div');
+                promoContainer.id = 'promociones-aplicadas-container';
+                promoContainer.className = 'mt-4';
+                totalesContainer.appendChild(promoContainer);
+            } else {
+                return;
+            }
+        }
+        
+        let html = '<div class="bg-gradient-to-br from-yellow-500/10 to-yellow-600/10 border-2 border-yellow-500/30 rounded-xl p-4 shadow-lg">';
+        html += '<div class="flex items-center gap-2 mb-3">';
+        html += '<i class="bi bi-tag-fill text-yellow-400 text-xl"></i>';
+        html += '<h4 class="font-bold text-yellow-400">Promociones Aplicadas</h4>';
+        html += '</div>';
+        
+        html += '<div class="space-y-2">';
+        
+        promocionesActivas.forEach(function(promo) {
+            html += '<div class="bg-slate-800/50 rounded-lg p-3 border border-slate-700">';
+            html += '<div class="flex justify-between items-start mb-1">';
+            html += '<div class="flex-1">';
+            html += '<span class="font-semibold text-slate-200">' + promo.nombre + '</span>';
+            if (promo.tipo === 'descuento_personal') {
+                html += '<span class="ml-2 text-xs bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded-full">Personal</span>';
+            }
+            html += '</div>';
+            html += '<span class="text-green-400 font-bold">-$' + promo.monto.toFixed(2) + '</span>';
+            html += '</div>';
+            
+            if (promo.detalle) {
+                html += '<p class="text-xs text-slate-400">';
+                html += '<i class="bi bi-info-circle mr-1"></i>' + promo.detalle;
+                html += '</p>';
+            }
+            
+            html += '</div>';
+        });
+        
+        html += '</div>';
+        
+        html += '<div class="border-t border-yellow-500/30 mt-3 pt-3">';
+        html += '<div class="flex justify-between items-center">';
+        html += '<span class="text-yellow-400 font-bold">Total Ahorrado:</span>';
+        html += '<span class="text-green-400 font-bold text-lg">-$' + totalDescuentosPromociones.toFixed(2) + '</span>';
+        html += '</div>';
+        html += '</div>';
+        
+        html += '</div>';
+        
+        promoContainer.innerHTML = html;
     }
 
     /** 🔹 Inicialización */
@@ -2400,6 +2515,15 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
         cargarCategorias();
         cargarProductos();
         cargarOrden();
+        
+        // Listener para checkbox de descuento personal
+        const cbPersonal = document.getElementById('esPersonal');
+        if (cbPersonal) {
+            cbPersonal.addEventListener('change', function() {
+                console.log('🎁 Descuento personal:', this.checked ? 'Activado' : 'Desactivado');
+                calcularYMostrarPromociones();
+            });
+        }
         
         // Auto-actualización cada 10 segundos
         setInterval(cargarOrden, 10000);
