@@ -265,15 +265,33 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Cargar promociones
 function cargarPromociones() {
-    fetch('/POS/api/promotionsController/api.php?action=list')
+    fetch('api/promotionsController/api.php?action=list')
         .then(res => res.json())
         .then(data => {
             if (data.status === 'ok') {
                 promociones = data.data;
                 mostrarPromociones();
+            } else {
+                console.error('Error en respuesta:', data);
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error al cargar',
+                    text: data.msg || 'No se pudieron cargar las promociones',
+                    background: '#1f2937',
+                    color: '#fff'
+                });
             }
         })
-        .catch(err => console.error('Error al cargar promociones:', err));
+        .catch(err => {
+            console.error('Error al cargar promociones:', err);
+            Swal.fire({
+                icon: 'error',
+                title: 'Error de conexión',
+                text: 'No se pudo conectar con el servidor',
+                background: '#1f2937',
+                color: '#fff'
+            });
+        });
 }
 
 // Mostrar promociones
@@ -421,12 +439,14 @@ function obtenerNombreAplicacion(aplica) {
 
 // Cargar productos
 function cargarProductos() {
-    fetch('/POS/api/promotionsController/productos.php')
+    fetch('api/promotionsController/productos.php')
         .then(res => res.json())
         .then(data => {
             if (data.status === 'ok') {
                 productos = data.data;
                 productosFiltrados = productos;
+            } else {
+                console.error('Error al cargar productos:', data);
             }
         })
         .catch(err => console.error('Error al cargar productos:', err));
@@ -434,11 +454,13 @@ function cargarProductos() {
 
 // Cargar categorías
 function cargarCategorias() {
-    fetch('/POS/api/promotionsController/categorias.php')
+    fetch('api/promotionsController/categorias.php')
         .then(res => res.json())
         .then(data => {
             if (data.status === 'ok') {
                 categorias = data.data;
+            } else {
+                console.error('Error al cargar categorías:', data);
             }
         })
         .catch(err => console.error('Error al cargar categorías:', err));
@@ -550,15 +572,24 @@ function guardarPromocion(e) {
     e.preventDefault();
     
     const formData = new FormData(e.target);
+    const tipo = formData.get('tipo');
+    const valorRaw = formData.get('valor');
+    
+    // Convertir valor vacío a null para evitar errores de decimal
+    let valor = null;
+    if (valorRaw && valorRaw !== '' && !isNaN(valorRaw)) {
+        valor = parseFloat(valorRaw);
+    }
+    
     const data = {
         nombre: formData.get('nombre'),
         descripcion: formData.get('descripcion'),
-        tipo: formData.get('tipo'),
-        valor: formData.get('valor'),
+        tipo: tipo,
+        valor: valor,
         aplica_a: formData.get('aplica_a'),
         activa: document.getElementById('promo_activa').checked ? 1 : 0,
-        fecha_inicio: formData.get('fecha_inicio'),
-        fecha_fin: formData.get('fecha_fin'),
+        fecha_inicio: formData.get('fecha_inicio') || null,
+        fecha_fin: formData.get('fecha_fin') || null,
         prioridad: formData.get('prioridad'),
         aplicar_mayor_valor: document.getElementById('promo_mayor_valor').checked ? 1 : 0,
         minimo_productos: formData.get('minimo_productos'),
@@ -573,7 +604,7 @@ function guardarPromocion(e) {
     
     const action = id ? 'update' : 'create';
     
-    fetch(`/POS/api/promotionsController/api.php?action=${action}`, {
+    fetch(`api/promotionsController/api.php?action=${action}`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(data)
@@ -614,7 +645,7 @@ function guardarPromocion(e) {
 
 // Editar promoción
 function editarPromocion(id) {
-    fetch(`/POS/api/promotionsController/api.php?action=get&id=${id}`)
+    fetch(`api/promotionsController/api.php?action=get&id=${id}`)
         .then(res => res.json())
         .then(data => {
             if (data.status === 'ok') {
@@ -637,10 +668,14 @@ function editarPromocion(id) {
                 actualizarCamposTipo();
                 actualizarCamposAplicacion();
                 
+                // Asegurar que productos y categorías son arrays
+                const productosArray = Array.isArray(promo.productos) ? promo.productos : [];
+                const categoriasArray = Array.isArray(promo.categorias) ? promo.categorias : [];
+                
                 if (promo.aplica_a === 'productos') {
-                    mostrarProductosEnModal(promo.productos);
+                    mostrarProductosEnModal(productosArray);
                 } else if (promo.aplica_a === 'categorias') {
-                    mostrarCategoriasEnModal(promo.categorias);
+                    mostrarCategoriasEnModal(categoriasArray);
                 }
                 
                 document.getElementById('modalPromocion').classList.remove('hidden');
@@ -651,7 +686,7 @@ function editarPromocion(id) {
 
 // Toggle promoción
 function togglePromocion(id) {
-    fetch('/POS/api/promotionsController/api.php?action=toggle', {
+    fetch('api/promotionsController/api.php?action=toggle', {
         method: 'POST',
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
         body: `id=${id}`
@@ -679,7 +714,7 @@ function eliminarPromocion(id) {
         color: '#fff'
     }).then(result => {
         if (result.isConfirmed) {
-            fetch('/POS/api/promotionsController/api.php?action=delete', {
+            fetch('api/promotionsController/api.php?action=delete', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/x-www-form-urlencoded'},
                 body: `id=${id}`

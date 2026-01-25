@@ -492,6 +492,66 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
                         
                         <!-- Totales fijos -->
                         <div class="kiosk-totales-section">
+                            <?php if ($esAdministrador || hasPermission('ordenes', 'editar')): ?>
+                            <!-- Controles de promociones y descuentos -->
+                            <div class="space-y-2 mb-3">
+                                <!-- Toggle de Promociones para esta Mesa -->
+                                <div class="bg-gradient-to-r from-purple-500/10 to-purple-600/10 border border-purple-500/30 rounded-lg p-3">
+                                    <label class="flex items-center justify-between cursor-pointer group">
+                                        <span class="text-purple-300 font-semibold group-hover:text-purple-200 transition-colors flex items-center">
+                                            <i class="bi bi-gift mr-2"></i>Aplicar Promociones
+                                        </span>
+                                        <div class="relative">
+                                            <input type="checkbox" id="aplicarPromociones" 
+                                                   <?= ($mesa['aplicar_promociones'] ?? 1) ? 'checked' : '' ?>
+                                                   class="sr-only peer"
+                                                   data-mesa-id="<?= $mesa_id ?>">
+                                            <div class="w-11 h-6 bg-slate-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-500/50 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                                        </div>
+                                    </label>
+                                    <p class="text-xs text-purple-200/60 mt-1 ml-6">
+                                        <?= ($mesa['es_para_llevar'] ?? 0) ? '📦 Orden para llevar (promociones desactivadas)' : 'Activa/desactiva promociones para esta mesa' ?>
+                                    </p>
+                                </div>
+                                
+                                <!-- Checkbox de descuento personal -->
+                                <div class="bg-gradient-to-r from-yellow-500/10 to-yellow-600/10 border border-yellow-500/30 rounded-lg p-3">
+                                    <label class="flex items-center cursor-pointer group">
+                                        <input type="checkbox" id="esPersonal" class="w-5 h-5 text-yellow-500 bg-slate-700 border-slate-600 rounded focus:ring-yellow-500 focus:ring-2 cursor-pointer">
+                                        <span class="ml-3 text-yellow-300 font-semibold group-hover:text-yellow-200 transition-colors">
+                                            <i class="bi bi-person-badge mr-1"></i>Descuento Personal
+                                        </span>
+                                    </label>
+                                </div>
+                                
+                                <!-- Checkbox de descuento % manual -->
+                                <div class="bg-gradient-to-r from-orange-500/10 to-orange-600/10 border border-orange-500/30 rounded-lg p-3">
+                                    <label class="flex items-center justify-between cursor-pointer group">
+                                        <div class="flex items-center">
+                                            <input type="checkbox" id="aplicarDescuentoPorcentaje" 
+                                                   class="w-5 h-5 text-orange-500 bg-slate-700 border-slate-600 rounded focus:ring-orange-500 focus:ring-2 cursor-pointer"
+                                                   data-orden-id="<?= $orden_id ?>">
+                                            <span class="ml-3 text-orange-300 font-semibold group-hover:text-orange-200 transition-colors">
+                                                <i class="bi bi-percent mr-1"></i>Descuento %
+                                            </span>
+                                        </div>
+                                        <input type="number" 
+                                               id="porcentajeDescuento" 
+                                               min="0" 
+                                               max="100" 
+                                               step="0.5"
+                                               value="0"
+                                               placeholder="%"
+                                               class="w-16 px-2 py-1 text-center bg-slate-700 border border-orange-500/50 rounded text-orange-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                               disabled>
+                                    </label>
+                                    <p class="text-xs text-orange-200/60 mt-1 ml-8">
+                                        Aplica descuento manual por porcentaje a esta orden
+                                    </p>
+                                </div>
+                            </div>
+                            <?php endif; ?>
+                            
                             <div id="orden-totales" class="bg-slate-900/80 rounded-xl p-4 border border-slate-600">
                                 <div class="text-slate-400 text-center py-2 text-sm">
                                     <i class="bi bi-calculator mr-2"></i>Totales...
@@ -614,6 +674,71 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
     const mesaId = <?= $mesa_id ?>;
     const ordenId = <?= $orden_id ?>;
     const esAdministrador = <?= $esAdministrador ? 'true' : 'false' ?>;
+
+    /** 🔹 Función para actualizar descuento por porcentaje */
+    function actualizarDescuentoPorcentaje(aplicar, porcentaje) {
+        if (!ordenId) {
+            console.error('No hay orden activa');
+            return;
+        }
+        
+        console.log('💰 Actualizando descuento %:', aplicar ? `${porcentaje}%` : 'Desactivado');
+        
+        const formData = new FormData();
+        formData.append('orden_id', ordenId);
+        formData.append('aplicar', aplicar);
+        formData.append('porcentaje', porcentaje);
+        
+        fetch('/POS/controllers/actualizar_descuento_porcentaje.php', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Toast de confirmación
+                const toast = Swal.mixin({
+                    toast: true,
+                    position: 'top-end',
+                    showConfirmButton: false,
+                    timer: 2000,
+                    timerProgressBar: true
+                });
+                
+                toast.fire({
+                    icon: 'success',
+                    title: aplicar ? `💰 Descuento ${porcentaje}% activado` : '🚫 Descuento desactivado',
+                    background: '#1f2937',
+                    color: '#ffffff'
+                });
+                
+                // Recargar orden para mostrar totales actualizados
+                cargarOrden();
+            } else {
+                throw new Error(data.message || 'Error al actualizar descuento');
+            }
+        })
+        .catch(error => {
+            console.error('❌ Error al actualizar descuento:', error);
+            
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: error.message || 'No se pudo actualizar el descuento',
+                background: '#1f2937',
+                color: '#ffffff'
+            });
+            
+            // Revertir cambios en UI
+            const cb = document.getElementById('aplicarDescuentoPorcentaje');
+            const input = document.getElementById('porcentajeDescuento');
+            if (cb) cb.checked = false;
+            if (input) {
+                input.disabled = true;
+                input.value = 0;
+            }
+        });
+    }
 
     /** 🔹 Funciones globales para manejo de efectivo y cambio */
     function toggleEfectivoFields() {
@@ -1734,8 +1859,11 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
 
     /** 🔹 Cargar Orden */
     function cargarOrden() {
+        // Verificar si hay descuento personal activado
+        const esPersonal = document.getElementById('esPersonal')?.checked ? 1 : 0;
+        
         // Anti-caché: siempre obtener datos frescos
-        fetch('/POS/controllers/newPos/orden_actual.php?orden_id=' + ordenId + '&_=' + Date.now(), {
+        fetch('/POS/controllers/newPos/orden_actual.php?orden_id=' + ordenId + '&es_personal=' + esPersonal + '&_=' + Date.now(), {
             cache: 'no-store',
             headers: {
                 'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -1999,11 +2127,44 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
                     '<div class="flex justify-between">' +
                     '<span>Subtotal:</span>' +
                     '<span class="text-blue-400 font-semibold">$' + Number(data.subtotal).toFixed(2) + '</span>' +
-                    '</div>' +
-                    '<div class="flex justify-between">' +
-                    '<span>Descuento:</span>' +
-                    '<span class="text-green-400 font-semibold">$' + Number(data.descuento || 0).toFixed(2) + '</span>' +
                     '</div>';
+                
+                // Mostrar descuento estándar si existe
+                if (data.descuento && data.descuento > 0) {
+                    resumen += '<div class="flex justify-between">' +
+                        '<span>Descuento:</span>' +
+                        '<span class="text-green-400 font-semibold">-$' + Number(data.descuento).toFixed(2) + '</span>' +
+                        '</div>';
+                }
+                
+                // Mostrar promociones aplicadas
+                if (data.promociones && data.promociones.length > 0) {
+                    data.promociones.forEach(function(promo) {
+                        let tipoLabel = '';
+                        if (promo.tipo === 'descuento_personal') {
+                            tipoLabel = '<span class="ml-1 text-xs bg-yellow-500/30 text-yellow-300 px-2 py-0.5 rounded-full">Personal</span>';
+                        }
+                        
+                        resumen += '<div class="flex justify-between items-start">' +
+                            '<div class="flex items-center gap-1">' +
+                            '<i class="bi bi-tag-fill text-yellow-400 text-xs"></i>' +
+                            '<span class="text-sm">' + promo.nombre + tipoLabel + '</span>' +
+                            '</div>' +
+                            '<span class="text-yellow-400 font-semibold">-$' + Number(promo.monto).toFixed(2) + '</span>' +
+                            '</div>';
+                    });
+                }
+                
+                // Mostrar descuento porcentaje manual si está activado
+                if (data.descuento_porcentaje && data.descuento_porcentaje.aplicado && data.descuento_porcentaje.monto > 0) {
+                    resumen += '<div class="flex justify-between items-start bg-orange-500/10 -mx-2 px-2 py-1 rounded-lg">' +
+                        '<div class="flex items-center gap-1">' +
+                        '<i class="bi bi-percent text-orange-400 text-xs"></i>' +
+                        '<span class="text-sm text-orange-300">Descuento ' + data.descuento_porcentaje.porcentaje.toFixed(1) + '%</span>' +
+                        '</div>' +
+                        '<span class="text-orange-400 font-semibold">-$' + Number(data.descuento_porcentaje.monto).toFixed(2) + '</span>' +
+                        '</div>';
+                }
 
                 // Mostrar total cancelado si existe
                 if (data.total_cancelado && data.total_cancelado > 0) {
@@ -2061,6 +2222,18 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
 
                 resumen += '</div>';
                 document.getElementById('orden-totales').innerHTML = resumen;
+                
+                // Actualizar estado del checkbox de descuento porcentaje
+                if (data.descuento_porcentaje) {
+                    const cbDescuento = document.getElementById('aplicarDescuentoPorcentaje');
+                    const inputPorcentaje = document.getElementById('porcentajeDescuento');
+                    
+                    if (cbDescuento && inputPorcentaje) {
+                        cbDescuento.checked = data.descuento_porcentaje.aplicado;
+                        inputPorcentaje.disabled = !data.descuento_porcentaje.aplicado;
+                        inputPorcentaje.value = data.descuento_porcentaje.porcentaje || 0;
+                    }
+                }
                 
                 // Refrescar indicadores de scroll después de actualizar la orden
                 setTimeout(refreshScrollIndicators, 100);
@@ -2392,122 +2565,7 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
                     '<i class="bi bi-exclamation-triangle text-4xl mb-3"></i>' +
                     '<p>Error al cargar la orden</p>' +
                     '</div>';
-            })
-            .finally(function() {
-                // Calcular promociones después de cargar la orden
-                setTimeout(function() {
-                    calcularYMostrarPromociones();
-                }, 300);
             });
-    }
-
-    /** 🎁 Variables y funciones para promociones */
-    let promocionesActivas = [];
-    let totalDescuentosPromociones = 0;
-
-    function calcularYMostrarPromociones() {
-        const esPersonal = document.getElementById('esPersonal')?.checked || false;
-        
-        // Mostrar/ocultar badge de personal
-        const badge = document.getElementById('badgeDescuentoPersonal');
-        if (badge) {
-            if (esPersonal) {
-                badge.classList.remove('hidden');
-            } else {
-                badge.classList.add('hidden');
-            }
-        }
-        
-        fetch('/POS/api/promotionsController/calcular_orden.php', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-            body: 'orden_id=' + ordenId + '&es_personal=' + (esPersonal ? 1 : 0)
-        })
-        .then(function(res) { return res.json(); })
-        .then(function(data) {
-            if (data.status === 'ok') {
-                promocionesActivas = data.promociones || [];
-                totalDescuentosPromociones = data.total_descuentos || 0;
-                
-                if (data.tiene_promociones) {
-                    console.log('🎉 Promociones aplicadas:', promocionesActivas.length);
-                    mostrarPromocionesEnResumen();
-                } else {
-                    // Limpiar si no hay promociones
-                    const promoContainer = document.getElementById('promociones-aplicadas-container');
-                    if (promoContainer) {
-                        promoContainer.innerHTML = '';
-                    }
-                }
-            }
-        })
-        .catch(function(err) {
-            console.error('❌ Error al calcular promociones:', err);
-            promocionesActivas = [];
-            totalDescuentosPromociones = 0;
-        });
-    }
-
-    function mostrarPromocionesEnResumen() {
-        if (promocionesActivas.length === 0) return;
-        
-        // Buscar o crear contenedor de promociones
-        let promoContainer = document.getElementById('promociones-aplicadas-container');
-        
-        if (!promoContainer) {
-            // Crear contenedor después de totales
-            const totalesContainer = document.getElementById('orden-totales');
-            if (totalesContainer) {
-                promoContainer = document.createElement('div');
-                promoContainer.id = 'promociones-aplicadas-container';
-                promoContainer.className = 'mt-4';
-                totalesContainer.appendChild(promoContainer);
-            } else {
-                return;
-            }
-        }
-        
-        let html = '<div class="bg-gradient-to-br from-yellow-500/10 to-yellow-600/10 border-2 border-yellow-500/30 rounded-xl p-4 shadow-lg">';
-        html += '<div class="flex items-center gap-2 mb-3">';
-        html += '<i class="bi bi-tag-fill text-yellow-400 text-xl"></i>';
-        html += '<h4 class="font-bold text-yellow-400">Promociones Aplicadas</h4>';
-        html += '</div>';
-        
-        html += '<div class="space-y-2">';
-        
-        promocionesActivas.forEach(function(promo) {
-            html += '<div class="bg-slate-800/50 rounded-lg p-3 border border-slate-700">';
-            html += '<div class="flex justify-between items-start mb-1">';
-            html += '<div class="flex-1">';
-            html += '<span class="font-semibold text-slate-200">' + promo.nombre + '</span>';
-            if (promo.tipo === 'descuento_personal') {
-                html += '<span class="ml-2 text-xs bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded-full">Personal</span>';
-            }
-            html += '</div>';
-            html += '<span class="text-green-400 font-bold">-$' + promo.monto.toFixed(2) + '</span>';
-            html += '</div>';
-            
-            if (promo.detalle) {
-                html += '<p class="text-xs text-slate-400">';
-                html += '<i class="bi bi-info-circle mr-1"></i>' + promo.detalle;
-                html += '</p>';
-            }
-            
-            html += '</div>';
-        });
-        
-        html += '</div>';
-        
-        html += '<div class="border-t border-yellow-500/30 mt-3 pt-3">';
-        html += '<div class="flex justify-between items-center">';
-        html += '<span class="text-yellow-400 font-bold">Total Ahorrado:</span>';
-        html += '<span class="text-green-400 font-bold text-lg">-$' + totalDescuentosPromociones.toFixed(2) + '</span>';
-        html += '</div>';
-        html += '</div>';
-        
-        html += '</div>';
-        
-        promoContainer.innerHTML = html;
     }
 
     /** 🔹 Inicialización */
@@ -2521,7 +2579,116 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
         if (cbPersonal) {
             cbPersonal.addEventListener('change', function() {
                 console.log('🎁 Descuento personal:', this.checked ? 'Activado' : 'Desactivado');
-                calcularYMostrarPromociones();
+                // Recargar orden para aplicar/quitar descuento
+                cargarOrden();
+            });
+        }
+        
+        // Listener para toggle de promociones
+        const togglePromo = document.getElementById('aplicarPromociones');
+        if (togglePromo) {
+            togglePromo.addEventListener('change', function() {
+                const mesaId = this.getAttribute('data-mesa-id');
+                const aplicar = this.checked ? 1 : 0;
+                
+                console.log('🎁 Toggle promociones:', aplicar ? 'Activado' : 'Desactivado', 'para mesa', mesaId);
+                
+                // Guardar estado en base de datos
+                fetch('/POS/controllers/actualizar_mesa_promociones.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        mesa_id: mesaId,
+                        aplicar_promociones: aplicar
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Toast de confirmación
+                        const toast = Swal.mixin({
+                            toast: true,
+                            position: 'top-end',
+                            showConfirmButton: false,
+                            timer: 2000,
+                            timerProgressBar: true
+                        });
+                        
+                        toast.fire({
+                            icon: 'success',
+                            title: aplicar ? '✅ Promociones activadas' : '🚫 Promociones desactivadas',
+                            background: '#1f2937',
+                            color: '#ffffff'
+                        });
+                        
+                        // Recargar orden para recalcular con/sin promociones
+                        cargarOrden();
+                    } else {
+                        throw new Error(data.message || 'Error al actualizar');
+                    }
+                })
+                .catch(error => {
+                    console.error('❌ Error al actualizar promociones:', error);
+                    // Revertir el toggle
+                    this.checked = !this.checked;
+                    
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Error',
+                        text: 'No se pudo actualizar el estado de promociones',
+                        background: '#1f2937',
+                        color: '#ffffff'
+                    });
+                });
+            });
+        }
+        
+        // Listener para checkbox de descuento % manual
+        const cbDescuentoPorcentaje = document.getElementById('aplicarDescuentoPorcentaje');
+        const inputPorcentaje = document.getElementById('porcentajeDescuento');
+        
+        if (cbDescuentoPorcentaje && inputPorcentaje) {
+            // Habilitar/deshabilitar input según checkbox
+            cbDescuentoPorcentaje.addEventListener('change', function() {
+                const aplicar = this.checked;
+                inputPorcentaje.disabled = !aplicar;
+                
+                if (!aplicar) {
+                    inputPorcentaje.value = 0;
+                    actualizarDescuentoPorcentaje(0, 0);
+                } else {
+                    // Focus en el input para que capture el porcentaje
+                    inputPorcentaje.focus();
+                    inputPorcentaje.select();
+                }
+            });
+            
+            // Actualizar cuando cambia el porcentaje
+            inputPorcentaje.addEventListener('change', function() {
+                if (cbDescuentoPorcentaje.checked) {
+                    const porcentaje = parseFloat(this.value) || 0;
+                    
+                    // Validar rango
+                    if (porcentaje < 0) {
+                        this.value = 0;
+                        return;
+                    }
+                    if (porcentaje > 100) {
+                        this.value = 100;
+                        return;
+                    }
+                    
+                    actualizarDescuentoPorcentaje(1, porcentaje);
+                }
+            });
+            
+            // También actualizar al presionar Enter
+            inputPorcentaje.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    this.blur(); // Trigger change event
+                }
             });
         }
         

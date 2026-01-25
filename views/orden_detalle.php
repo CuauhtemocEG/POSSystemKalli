@@ -21,11 +21,11 @@ if (!$orden) {
 }
 
 // Productos - Incluir item_index y variedades para auditoría detallada
-$productos = $pdo->prepare("
+$stmt_productos = $pdo->prepare("
     SELECT op.id, 
            p.nombre, 
            op.cantidad, 
-           op.preparado, 
+           COALESCE(op.preparado, 0) as preparado, 
            COALESCE(op.cancelado, 0) as cancelado,
            COALESCE(op.pendiente_cancelacion, 0) as pendiente_cancelacion,
            COALESCE(op.item_index, 1) as item_index,
@@ -33,16 +33,16 @@ $productos = $pdo->prepare("
            p.precio
     FROM orden_productos op
     JOIN productos p ON op.producto_id = p.id
-    WHERE op.orden_id = ? AND op.estado != 'eliminado'
+    WHERE op.orden_id = ?
     ORDER BY p.nombre, op.item_index
 ");
-$productos->execute([$orden_id]);
-$productos_raw = $productos->fetchAll(PDO::FETCH_ASSOC);
+$stmt_productos->execute([$orden_id]);
+$productos_raw = $stmt_productos->fetchAll(PDO::FETCH_ASSOC);
 
 // Obtener variedades para cada producto
 $productos = [];
 foreach ($productos_raw as $prod) {
-  // Obtener variedades de este item específico
+  // Obtener variedades de este item específico (si existen)
   $stmtVariedades = $pdo->prepare("
     SELECT grupo_nombre, opcion_nombre, precio_adicional
     FROM orden_producto_variedades
@@ -52,27 +52,10 @@ foreach ($productos_raw as $prod) {
   $stmtVariedades->execute([$orden_id, $prod['producto_id'], $prod['item_index']]);
   $variedades = $stmtVariedades->fetchAll(PDO::FETCH_ASSOC);
 
-  // Generar una clave única por producto, item_index y variedades
-  $variedades_key = '';
-  if (!empty($variedades)) {
-    foreach ($variedades as $v) {
-      $variedades_key .= $v['grupo_nombre'] . ':' . $v['opcion_nombre'] . ';';
-    }
-  }
-  $key = $prod['producto_id'] . '|' . $prod['item_index'] . '|' . md5($variedades_key);
-
-  if (!isset($productos[$key])) {
-    $prod['variedades'] = $variedades;
-    $productos[$key] = $prod;
-  } else {
-    // Sumar cantidades si ya existe (caso raro, pero por consistencia)
-    $productos[$key]['cantidad'] += $prod['cantidad'];
-    $productos[$key]['preparado'] += $prod['preparado'];
-    $productos[$key]['cancelado'] += $prod['cancelado'];
-    $productos[$key]['pendiente_cancelacion'] += $prod['pendiente_cancelacion'];
-  }
+  // Añadir variedades al producto
+  $prod['variedades'] = $variedades;
+  $productos[] = $prod;
 }
-$productos = array_values($productos);
 
 $subtotal = 0;
 $total_cancelado = 0;
@@ -84,6 +67,13 @@ foreach ($productos as $prod) {
     $cancelado = intval($prod['cancelado']);
     $pendiente_cancelacion = intval($prod['pendiente_cancelacion']);
     $precio = floatval($prod['precio']);
+    
+    // Sumar precio de variedades si existen
+    if (!empty($prod['variedades'])) {
+        foreach ($prod['variedades'] as $variedad) {
+            $precio += floatval($variedad['precio_adicional']);
+        }
+    }
     
     // Calcular cantidad activa (no cancelada ni pendiente de cancelación)
     $cantidad_activa = $cantidad - $cancelado - $pendiente_cancelacion;
@@ -97,8 +87,35 @@ foreach ($productos as $prod) {
     $productos_cancelados += $cancelado;
 }
 
+// Obtener promociones aplicadas a esta orden
+try {
+    $stmtPromociones = $pdo->prepare("
+        SELECT 
+            pa.id,
+            pa.promocion_id,
+            p.nombre as nombre_promocion,
+            p.tipo as tipo_descuento,
+            p.valor as valor_descuento,
+            pa.descuento_aplicado,
+            pa.aplicado_at as aplicada_en
+        FROM promociones_aplicadas pa
+        JOIN promociones p ON p.id = pa.promocion_id
+        WHERE pa.orden_id = ?
+        ORDER BY pa.aplicado_at ASC
+    ");
+    $stmtPromociones->execute([$orden_id]);
+    $promociones_aplicadas = $stmtPromociones->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    // Si la tabla no existe, continuar sin promociones
+    $promociones_aplicadas = [];
+}
 
+// Calcular descuento total de promociones
 $descuento = 0;
+foreach ($promociones_aplicadas as $promo) {
+    $descuento += floatval($promo['descuento_aplicado']);
+}
+
 $total = $subtotal - $descuento;
 
 // Actualizar el total en la base de datos si es diferente al calculado
@@ -284,18 +301,27 @@ if (isset($orden['total']) && abs($orden['total'] - $total) > 0.01) {
               </span>
             </td>
             <td class="px-6 py-4 text-right text-sm font-medium text-gray-300">
-              $<?= number_format($prod['precio'], 2) ?>
+              <?php 
+              $precio_unitario = floatval($prod['precio']);
+              // Sumar precio de variedades
+              if (!empty($prod['variedades'])) {
+                  foreach ($prod['variedades'] as $variedad) {
+                      $precio_unitario += floatval($variedad['precio_adicional']);
+                  }
+              }
+              ?>
+              $<?= number_format($precio_unitario, 2) ?>
             </td>
             <td class="px-6 py-4 text-right text-sm font-bold">
-              <div class="text-white">$<?= number_format($prod['precio'] * $cantidad_activa, 2) ?></div>
+              <div class="text-white">$<?= number_format($precio_unitario * $cantidad_activa, 2) ?></div>
               <?php if ($cancelado > 0): ?>
                 <div class="text-red-400 text-xs line-through">
-                  (Cancelado: $<?= number_format($prod['precio'] * $cancelado, 2) ?>)
+                  (Cancelado: $<?= number_format($precio_unitario * $cancelado, 2) ?>)
                 </div>
               <?php endif; ?>
               <?php if ($pendiente_cancelacion > 0): ?>
                 <div class="text-orange-400 text-xs">
-                  (Pendiente: $<?= number_format($prod['precio'] * $pendiente_cancelacion, 2) ?>)
+                  (Pendiente: $<?= number_format($precio_unitario * $pendiente_cancelacion, 2) ?>)
                 </div>
               <?php endif; ?>
             </td>
@@ -305,6 +331,81 @@ if (isset($orden['total']) && abs($orden['total'] - $total) > 0.01) {
     </table>
   </div>
 </div>
+
+<!-- Promociones Aplicadas -->
+<?php if (!empty($promociones_aplicadas)): ?>
+<div class="bg-dark-800/50 border border-dark-700/50 rounded-2xl overflow-hidden mb-8">
+  <div class="p-6 border-b border-dark-700/50 bg-gradient-to-r from-yellow-500/10 to-orange-500/10">
+    <h2 class="text-xl font-montserrat-semibold text-white flex items-center">
+      <i class="bi bi-tags-fill mr-2 text-yellow-400"></i>
+      Promociones Aplicadas
+    </h2>
+  </div>
+  
+  <div class="p-6 space-y-3">
+    <?php foreach ($promociones_aplicadas as $promo): ?>
+      <div class="bg-gradient-to-r from-yellow-500/5 to-orange-500/5 border border-yellow-500/20 rounded-xl p-4 hover:border-yellow-500/40 transition-all duration-200">
+        <div class="flex items-start justify-between">
+          <div class="flex-1">
+            <div class="flex items-center gap-2 mb-2">
+              <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-yellow-500/20 text-yellow-300 border border-yellow-500/30">
+                <i class="bi bi-tag-fill mr-1"></i>
+                PROMOCIÓN
+              </span>
+              <span class="text-xs text-gray-400">
+                <i class="bi bi-clock mr-1"></i>
+                <?= date('d/m/Y H:i', strtotime($promo['aplicada_en'])) ?>
+              </span>
+            </div>
+            
+            <h3 class="text-white font-semibold mb-1 flex items-center gap-2">
+              <?= htmlspecialchars($promo['nombre_promocion']) ?>
+            </h3>
+            
+            <div class="flex items-center gap-3 text-sm">
+              <span class="text-gray-400">
+                Tipo: 
+                <span class="text-blue-300 font-medium">
+                  <?php
+                  $tipo_texto = match($promo['tipo_descuento']) {
+                    'descuento_porcentaje' => $promo['valor_descuento'] . '% de descuento',
+                    'descuento_fijo' => '$' . number_format($promo['valor_descuento'], 2) . ' de descuento',
+                    'descuento_personal' => $promo['valor_descuento'] . '% descuento personal',
+                    '2x1' => '2x1 en productos seleccionados',
+                    '3x2' => '3x2 en productos seleccionados',
+                    default => 'Descuento especial'
+                  };
+                  echo $tipo_texto;
+                  ?>
+                </span>
+              </span>
+            </div>
+          </div>
+          
+          <div class="text-right">
+            <div class="text-sm text-gray-400 mb-1">Descuento</div>
+            <div class="text-2xl font-bold text-green-400">
+              -$<?= number_format($promo['descuento_aplicado'], 2) ?>
+            </div>
+          </div>
+        </div>
+      </div>
+    <?php endforeach; ?>
+    
+    <div class="bg-yellow-900/20 border border-yellow-600/30 rounded-lg p-3 mt-4">
+      <div class="flex items-center justify-between">
+        <span class="text-yellow-300 font-semibold flex items-center">
+          <i class="bi bi-piggy-bank mr-2"></i>
+          Total Ahorrado con Promociones:
+        </span>
+        <span class="text-2xl font-bold text-yellow-400">
+          -$<?= number_format($descuento, 2) ?>
+        </span>
+      </div>
+    </div>
+  </div>
+</div>
+<?php endif; ?>
 
 <!-- Order Summary -->
 <div class="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-6">
@@ -326,10 +427,20 @@ if (isset($orden['total']) && abs($orden['total'] - $total) > 0.01) {
     </div>
     <?php endif; ?>
     
+    <?php if ($descuento > 0): ?>
+    <div class="flex justify-between items-center py-2 bg-yellow-500/5 -mx-2 px-2 rounded-lg">
+      <span class="text-yellow-300 flex items-center">
+        <i class="bi bi-tags-fill mr-2"></i>
+        Descuento por Promociones:
+      </span>
+      <span class="text-lg font-semibold text-yellow-400">-$<?= number_format($descuento, 2) ?></span>
+    </div>
+    <?php else: ?>
     <div class="flex justify-between items-center py-2">
       <span class="text-gray-400">Descuento:</span>
       <span class="text-lg font-semibold text-white">$<?= number_format($descuento, 2) ?></span>
     </div>
+    <?php endif; ?>
     
 
     

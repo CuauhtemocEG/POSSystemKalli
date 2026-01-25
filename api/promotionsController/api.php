@@ -123,11 +123,17 @@ function crearPromocion($pdo) {
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
         
+        // Procesar valor: convertir vacío o string vacío a NULL
+        $valor = null;
+        if (isset($data['valor']) && $data['valor'] !== '' && $data['valor'] !== null) {
+            $valor = floatval($data['valor']);
+        }
+        
         $stmt->execute([
             $data['nombre'],
             $data['descripcion'] ?? null,
             $data['tipo'],
-            $data['valor'] ?? null,
+            $valor,
             $data['aplica_a'] ?? 'productos',
             isset($data['activa']) ? intval($data['activa']) : 1,
             $data['fecha_inicio'] ?? null,
@@ -209,11 +215,17 @@ function actualizarPromocion($pdo) {
             WHERE id = ?
         ");
         
+        // Procesar valor: convertir vacío o string vacío a NULL
+        $valor = null;
+        if (isset($data['valor']) && $data['valor'] !== '' && $data['valor'] !== null) {
+            $valor = floatval($data['valor']);
+        }
+        
         $stmt->execute([
             $data['nombre'],
             $data['descripcion'] ?? null,
             $data['tipo'],
-            $data['valor'] ?? null,
+            $valor,
             $data['aplica_a'] ?? 'productos',
             isset($data['activa']) ? intval($data['activa']) : 1,
             $data['fecha_inicio'] ?? null,

@@ -25,10 +25,23 @@ if ($fechaDesde && $fechaHasta) {
 
 // Estadísticas básicas con filtros aplicados
 $totalOrdenes = $pdo->query("SELECT COUNT(*) FROM ordenes WHERE estado = 'cerrada'" . ($condicionFecha ? " AND $condicionFecha" : ""))->fetchColumn();
+
+// Total vendido (después de promociones)
 $ventasHoy = $pdo->query("SELECT COALESCE(SUM(total), 0) FROM ordenes WHERE $condicionFechaHoy AND estado = 'cerrada'")->fetchColumn() ?? 0;
 $ventasSemana = $pdo->query("SELECT COALESCE(SUM(total), 0) FROM ordenes WHERE $condicionFechaSemana AND estado = 'cerrada'")->fetchColumn() ?? 0;
 $ventasMes = $pdo->query("SELECT COALESCE(SUM(total), 0) FROM ordenes WHERE $condicionFechaMes AND estado = 'cerrada'")->fetchColumn() ?? 0;
+
+// Subtotal (antes de promociones)
+$subtotalHoy = $pdo->query("SELECT COALESCE(SUM(COALESCE(subtotal, total)), 0) FROM ordenes WHERE $condicionFechaHoy AND estado = 'cerrada'")->fetchColumn() ?? 0;
+$subtotalSemana = $pdo->query("SELECT COALESCE(SUM(COALESCE(subtotal, total)), 0) FROM ordenes WHERE $condicionFechaSemana AND estado = 'cerrada'")->fetchColumn() ?? 0;
+$subtotalMes = $pdo->query("SELECT COALESCE(SUM(COALESCE(subtotal, total)), 0) FROM ordenes WHERE $condicionFechaMes AND estado = 'cerrada'")->fetchColumn() ?? 0;
+
 $ordenesActivas = $pdo->query("SELECT COUNT(*) FROM ordenes WHERE estado = 'abierta'" . ($condicionFecha ? " AND $condicionFecha" : ""))->fetchColumn();
+
+// Descuentos por promociones aplicadas (calculado desde subtotal - total)
+$descuentosHoy = $subtotalHoy - $ventasHoy;
+$descuentosSemana = $subtotalSemana - $ventasSemana;
+$descuentosMes = $subtotalMes - $ventasMes;
 
 // Totales por método de pago - Respetan filtro de fecha personalizado
 $ventasEfectivo = $pdo->query("SELECT COALESCE(SUM(total), 0) FROM ordenes WHERE estado = 'cerrada' AND metodo_pago = 'efectivo'" . ($condicionFecha ? " AND $condicionFecha" : ""))->fetchColumn() ?? 0;
@@ -286,6 +299,147 @@ $ordenesCerradasDetalle = $pdo->query("
     </div>
 </div>
 
+<!-- 📊 Panel Principal: Análisis de Ventas y Promociones -->
+<div class="mb-8">
+    <div class="bg-gradient-to-br from-blue-900/40 via-purple-900/30 to-indigo-900/40 backdrop-blur-xl rounded-3xl border border-blue-500/30 p-8 shadow-2xl">
+        <div class="flex items-center gap-4 mb-8">
+            <div class="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg">
+                <i class="bi bi-graph-up-arrow text-white text-2xl"></i>
+            </div>
+            <div>
+                <h2 class="text-3xl font-bold text-white">Análisis de Ventas - Hoy</h2>
+                <p class="text-blue-200 text-sm">Desglose completo de ingresos y promociones</p>
+            </div>
+        </div>
+
+        <!-- Resumen Hoy -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+            <!-- Total de Venta (Subtotal) -->
+            <div class="bg-dark-800/60 rounded-2xl p-6 border border-blue-500/20">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="w-10 h-10 bg-blue-600/20 rounded-lg flex items-center justify-center">
+                        <i class="bi bi-calculator text-blue-400"></i>
+                    </div>
+                    <h3 class="text-sm font-semibold text-blue-200">Total de Venta</h3>
+                </div>
+                <div class="text-4xl font-bold text-white mb-2">$<?= number_format($subtotalHoy, 2) ?></div>
+                <p class="text-xs text-gray-400">Valor sin promociones aplicadas</p>
+            </div>
+
+            <!-- Promociones Aplicadas -->
+            <div class="bg-dark-800/60 rounded-2xl p-6 border border-yellow-500/20">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="w-10 h-10 bg-yellow-600/20 rounded-lg flex items-center justify-center">
+                        <i class="bi bi-tags text-yellow-400"></i>
+                    </div>
+                    <h3 class="text-sm font-semibold text-yellow-200">Promociones Aplicadas</h3>
+                </div>
+                <div class="text-4xl font-bold text-yellow-400 mb-2">-$<?= number_format($descuentosHoy, 2) ?></div>
+                <p class="text-xs text-gray-400">
+                    <?php if ($subtotalHoy > 0): ?>
+                        <?= number_format(($descuentosHoy / $subtotalHoy) * 100, 1) ?>% del total
+                    <?php else: ?>
+                        0% del total
+                    <?php endif; ?>
+                </p>
+            </div>
+
+            <!-- Total Real Cobrado -->
+            <div class="bg-dark-800/60 rounded-2xl p-6 border border-green-500/20">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="w-10 h-10 bg-green-600/20 rounded-lg flex items-center justify-center">
+                        <i class="bi bi-cash-coin text-green-400"></i>
+                    </div>
+                    <h3 class="text-sm font-semibold text-green-200">Total Real Cobrado</h3>
+                </div>
+                <div class="text-4xl font-bold text-green-400 mb-2">$<?= number_format($ventasHoy, 2) ?></div>
+                <p class="text-xs text-gray-400">Dinero efectivamente recibido</p>
+            </div>
+        </div>
+
+        <!-- Ecuación Visual -->
+        <div class="bg-dark-900/60 rounded-xl p-6 border border-gray-700/50">
+            <div class="flex items-center justify-center gap-6 text-lg flex-wrap">
+                <div class="text-center">
+                    <span class="text-blue-400 font-bold text-2xl">$<?= number_format($subtotalHoy, 2) ?></span>
+                    <p class="text-xs text-gray-400 mt-1">Total Venta</p>
+                </div>
+                <span class="text-gray-500 text-2xl">−</span>
+                <div class="text-center">
+                    <span class="text-yellow-400 font-bold text-2xl">$<?= number_format($descuentosHoy, 2) ?></span>
+                    <p class="text-xs text-gray-400 mt-1">Promociones</p>
+                </div>
+                <span class="text-gray-500 text-2xl">=</span>
+                <div class="text-center">
+                    <span class="text-green-400 font-bold text-3xl">$<?= number_format($ventasHoy, 2) ?></span>
+                    <p class="text-xs text-gray-400 mt-1">Total Cobrado</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 📈 Comparativa: Semana y Mes -->
+<div class="mb-8">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Semana -->
+        <div class="bg-dark-700/30 backdrop-blur-xl rounded-2xl border border-dark-600/50 p-6">
+            <div class="flex items-center gap-3 mb-6">
+                <div class="w-12 h-12 bg-purple-600/20 rounded-xl flex items-center justify-center">
+                    <i class="bi bi-calendar-week text-purple-400 text-xl"></i>
+                </div>
+                <div>
+                    <h3 class="text-xl font-bold text-white">Última Semana</h3>
+                    <p class="text-gray-400 text-xs">7 días</p>
+                </div>
+            </div>
+            
+            <div class="space-y-4">
+                <div class="flex justify-between items-center pb-3 border-b border-gray-700">
+                    <span class="text-gray-400 text-sm">Total de venta:</span>
+                    <span class="text-white font-semibold text-lg">$<?= number_format($subtotalSemana, 2) ?></span>
+                </div>
+                <div class="flex justify-between items-center pb-3 border-b border-gray-700">
+                    <span class="text-yellow-400 text-sm">Promociones:</span>
+                    <span class="text-yellow-400 font-semibold text-lg">-$<?= number_format($descuentosSemana, 2) ?></span>
+                </div>
+                <div class="flex justify-between items-center pt-2">
+                    <span class="text-purple-300 font-semibold">Total cobrado:</span>
+                    <span class="text-purple-400 font-bold text-2xl">$<?= number_format($ventasSemana, 2) ?></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Mes -->
+        <div class="bg-dark-700/30 backdrop-blur-xl rounded-2xl border border-dark-600/50 p-6">
+            <div class="flex items-center gap-3 mb-6">
+                <div class="w-12 h-12 bg-indigo-600/20 rounded-xl flex items-center justify-center">
+                    <i class="bi bi-calendar-month text-indigo-400 text-xl"></i>
+                </div>
+                <div>
+                    <h3 class="text-xl font-bold text-white">Último Mes</h3>
+                    <p class="text-gray-400 text-xs">30 días</p>
+                </div>
+            </div>
+            
+            <div class="space-y-4">
+                <div class="flex justify-between items-center pb-3 border-b border-gray-700">
+                    <span class="text-gray-400 text-sm">Total de venta:</span>
+                    <span class="text-white font-semibold text-lg">$<?= number_format($subtotalMes, 2) ?></span>
+                </div>
+                <div class="flex justify-between items-center pb-3 border-b border-gray-700">
+                    <span class="text-yellow-400 text-sm">Promociones:</span>
+                    <span class="text-yellow-400 font-semibold text-lg">-$<?= number_format($descuentosMes, 2) ?></span>
+                </div>
+                <div class="flex justify-between items-center pt-2">
+                    <span class="text-indigo-300 font-semibold">Total cobrado:</span>
+                    <span class="text-indigo-400 font-bold text-2xl">$<?= number_format($ventasMes, 2) ?></span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Stats Cards -->
 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
     <!-- Total Órdenes -->
@@ -329,6 +483,12 @@ $ordenesCerradasDetalle = $pdo->query("
                 </div>
                 <div class="text-right">
                     <div class="text-3xl font-bold text-white">$<?= number_format($ventasHoy, 2) ?></div>
+                    <?php if ($descuentosHoy > 0): ?>
+                    <p class="text-xs text-gray-500 line-through">$<?= number_format($subtotalHoy, 2) ?></p>
+                    <p class="text-xs text-yellow-400">
+                        <i class="bi bi-tag-fill"></i> -$<?= number_format($descuentosHoy, 2) ?> promos
+                    </p>
+                    <?php endif; ?>
                     <p class="text-gray-400 text-sm">Hoy</p>
                 </div>
             </div>
@@ -345,6 +505,12 @@ $ordenesCerradasDetalle = $pdo->query("
                 </div>
                 <div class="text-right">
                     <div class="text-3xl font-bold text-white">$<?= number_format($ventasSemana, 2) ?></div>
+                    <?php if ($descuentosSemana > 0): ?>
+                    <p class="text-xs text-gray-500 line-through">$<?= number_format($subtotalSemana, 2) ?></p>
+                    <p class="text-xs text-yellow-400">
+                        <i class="bi bi-tag-fill"></i> -$<?= number_format($descuentosSemana, 2) ?>
+                    </p>
+                    <?php endif; ?>
                     <p class="text-gray-400 text-sm">7 días</p>
                 </div>
             </div>
@@ -361,6 +527,12 @@ $ordenesCerradasDetalle = $pdo->query("
                 </div>
                 <div class="text-right">
                     <div class="text-3xl font-bold text-white">$<?= number_format($ventasMes, 2) ?></div>
+                    <?php if ($descuentosMes > 0): ?>
+                    <p class="text-xs text-gray-500 line-through">$<?= number_format($subtotalMes, 2) ?></p>
+                    <p class="text-xs text-yellow-400">
+                        <i class="bi bi-tag-fill"></i> -$<?= number_format($descuentosMes, 2) ?>
+                    </p>
+                    <?php endif; ?>
                     <p class="text-gray-400 text-sm">30 días</p>
                 </div>
             </div>
@@ -368,6 +540,194 @@ $ordenesCerradasDetalle = $pdo->query("
         </div>
     </div>
 </div>
+
+<!-- Desglose: Subtotal vs Total con Promociones -->
+<?php if ($descuentosHoy > 0 || $descuentosSemana > 0 || $descuentosMes > 0): ?>
+<div class="mb-8">
+    <div class="bg-gradient-to-br from-yellow-500/10 to-orange-500/10 backdrop-blur-xl rounded-2xl border border-yellow-500/30 p-6">
+        <div class="flex items-center gap-3 mb-6">
+            <div class="w-12 h-12 bg-yellow-500/20 rounded-xl flex items-center justify-center">
+                <i class="bi bi-percent text-yellow-400 text-xl"></i>
+            </div>
+            <div>
+                <h2 class="text-xl font-semibold text-white">Impacto de Promociones</h2>
+                <p class="text-gray-400 text-sm">Comparativa: Ventas con vs sin promociones</p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <!-- Hoy -->
+            <div class="bg-dark-700/30 rounded-xl p-5 border border-dark-500/50">
+                <h3 class="text-gray-300 text-sm font-semibold mb-4 flex items-center gap-2">
+                    <i class="bi bi-calendar-day text-green-400"></i> Hoy
+                </h3>
+                <div class="space-y-3">
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-400 text-sm">Subtotal sin promos:</span>
+                        <span class="text-white font-semibold">$<?= number_format($subtotalHoy, 2) ?></span>
+                    </div>
+                    <div class="flex justify-between items-center text-yellow-400">
+                        <span class="text-sm">Descuentos:</span>
+                        <span class="font-semibold">-$<?= number_format($descuentosHoy, 2) ?></span>
+                    </div>
+                    <div class="border-t border-gray-600 pt-3 flex justify-between items-center">
+                        <span class="text-gray-300 font-semibold">Total con promos:</span>
+                        <span class="text-green-400 text-xl font-bold">$<?= number_format($ventasHoy, 2) ?></span>
+                    </div>
+                    <?php if ($subtotalHoy > 0): ?>
+                    <div class="text-center pt-2">
+                        <span class="inline-block bg-yellow-500/20 text-yellow-300 text-xs px-3 py-1 rounded-full">
+                            <?= number_format(($descuentosHoy / $subtotalHoy) * 100, 1) ?>% descuento
+                        </span>
+                    </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <!-- Semana -->
+            <div class="bg-dark-700/30 rounded-xl p-5 border border-dark-500/50">
+                <h3 class="text-gray-300 text-sm font-semibold mb-4 flex items-center gap-2">
+                    <i class="bi bi-calendar-week text-purple-400"></i> Semana
+                </h3>
+                <div class="space-y-3">
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-400 text-sm">Subtotal sin promos:</span>
+                        <span class="text-white font-semibold">$<?= number_format($subtotalSemana, 2) ?></span>
+                    </div>
+                    <div class="flex justify-between items-center text-yellow-400">
+                        <span class="text-sm">Descuentos:</span>
+                        <span class="font-semibold">-$<?= number_format($descuentosSemana, 2) ?></span>
+                    </div>
+                    <div class="border-t border-gray-600 pt-3 flex justify-between items-center">
+                        <span class="text-gray-300 font-semibold">Total con promos:</span>
+                        <span class="text-purple-400 text-xl font-bold">$<?= number_format($ventasSemana, 2) ?></span>
+                    </div>
+                    <?php if ($subtotalSemana > 0): ?>
+                    <div class="text-center pt-2">
+                        <span class="inline-block bg-yellow-500/20 text-yellow-300 text-xs px-3 py-1 rounded-full">
+                            <?= number_format(($descuentosSemana / $subtotalSemana) * 100, 1) ?>% descuento
+                        </span>
+                    </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <!-- Mes -->
+            <div class="bg-dark-700/30 rounded-xl p-5 border border-dark-500/50">
+                <h3 class="text-gray-300 text-sm font-semibold mb-4 flex items-center gap-2">
+                    <i class="bi bi-calendar-month text-indigo-400"></i> Mes
+                </h3>
+                <div class="space-y-3">
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-400 text-sm">Subtotal sin promos:</span>
+                        <span class="text-white font-semibold">$<?= number_format($subtotalMes, 2) ?></span>
+                    </div>
+                    <div class="flex justify-between items-center text-yellow-400">
+                        <span class="text-sm">Descuentos:</span>
+                        <span class="font-semibold">-$<?= number_format($descuentosMes, 2) ?></span>
+                    </div>
+                    <div class="border-t border-gray-600 pt-3 flex justify-between items-center">
+                        <span class="text-gray-300 font-semibold">Total con promos:</span>
+                        <span class="text-indigo-400 text-xl font-bold">$<?= number_format($ventasMes, 2) ?></span>
+                    </div>
+                    <?php if ($subtotalMes > 0): ?>
+                    <div class="text-center pt-2">
+                        <span class="inline-block bg-yellow-500/20 text-yellow-300 text-xs px-3 py-1 rounded-full">
+                            <?= number_format(($descuentosMes / $subtotalMes) * 100, 1) ?>% descuento
+                        </span>
+                    </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
+
+<!-- 🎁 Detalle de Promociones Aplicadas -->
+<?php
+// Obtener detalle de promociones aplicadas HOY
+$promocionesHoyDetalle = $pdo->query("
+    SELECT 
+        pr.nombre,
+        pr.tipo,
+        COUNT(DISTINCT pa.orden_id) as ordenes_afectadas,
+        SUM(pa.descuento_aplicado) as total_descuento
+    FROM promociones_aplicadas pa
+    JOIN promociones pr ON pa.promocion_id = pr.id
+    JOIN ordenes o ON pa.orden_id = o.id
+    WHERE o.estado = 'cerrada' 
+    AND DATE(o.creada_en) = CURDATE()
+    GROUP BY pr.id, pr.nombre, pr.tipo
+    ORDER BY total_descuento DESC
+")->fetchAll(PDO::FETCH_ASSOC);
+
+if (!empty($promocionesHoyDetalle)):
+?>
+<div class="mb-8">
+    <div class="bg-gradient-to-br from-orange-900/40 via-yellow-900/30 to-amber-900/40 backdrop-blur-xl rounded-2xl border border-orange-500/30 p-6">
+        <div class="flex items-center gap-3 mb-6">
+            <div class="w-12 h-12 bg-orange-500/20 rounded-xl flex items-center justify-center">
+                <i class="bi bi-gift text-orange-400 text-xl"></i>
+            </div>
+            <div>
+                <h2 class="text-xl font-semibold text-white">Detalle de Promociones Aplicadas Hoy</h2>
+                <p class="text-orange-200 text-sm">Desglose por tipo de promoción</p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <?php foreach ($promocionesHoyDetalle as $promo): 
+                $tipo_icon = [
+                    '2x1' => 'bi-percent',
+                    '3x2' => 'bi-bag-plus',
+                    'descuento_porcentaje' => 'bi-calculator',
+                    'descuento_fijo' => 'bi-tag',
+                    'descuento_personal' => 'bi-person-badge'
+                ];
+                $icon = $tipo_icon[$promo['tipo']] ?? 'bi-gift';
+            ?>
+            <div class="bg-dark-800/60 rounded-xl p-5 border border-orange-500/20 hover:border-orange-500/40 transition-colors">
+                <div class="flex items-start gap-3 mb-4">
+                    <div class="w-10 h-10 bg-orange-600/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                        <i class="<?= $icon ?> text-orange-400"></i>
+                    </div>
+                    <div class="flex-1">
+                        <h3 class="text-white font-semibold text-sm mb-1"><?= htmlspecialchars($promo['nombre']) ?></h3>
+                        <p class="text-xs text-gray-400 uppercase"><?= str_replace('_', ' ', $promo['tipo']) ?></p>
+                    </div>
+                </div>
+                
+                <div class="space-y-2">
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-400 text-xs">Órdenes:</span>
+                        <span class="text-white font-semibold"><?= $promo['ordenes_afectadas'] ?></span>
+                    </div>
+                    <div class="flex justify-between items-center pt-2 border-t border-gray-700">
+                        <span class="text-orange-300 text-xs">Descuento total:</span>
+                        <span class="text-orange-400 font-bold text-lg">$<?= number_format($promo['total_descuento'], 2) ?></span>
+                    </div>
+                </div>
+            </div>
+            <?php endforeach; ?>
+        </div>
+
+        <!-- Resumen total de promociones -->
+        <div class="mt-6 bg-dark-900/60 rounded-xl p-5 border border-orange-500/30">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-gray-400 text-sm mb-1">Total promociones diferentes:</p>
+                    <p class="text-white text-2xl font-bold"><?= count($promocionesHoyDetalle) ?></p>
+                </div>
+                <div class="text-right">
+                    <p class="text-orange-300 text-sm mb-1">Ahorro total para clientes:</p>
+                    <p class="text-orange-400 text-3xl font-bold">$<?= number_format($descuentosHoy, 2) ?></p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
 
 <!-- Resumen Visual de Corte de Caja -->
 <div class="mb-8">
@@ -475,6 +835,166 @@ $ordenesCerradasDetalle = $pdo->query("
         </div>
     </div>
 </div>
+
+<!-- Desglose por Método de Pago - Semana y Mes -->
+<div class="mb-8">
+    <div class="bg-gradient-to-br from-dark-700/40 to-dark-800/40 backdrop-blur-xl rounded-2xl border border-dark-600/50 p-6">
+        <div class="flex items-center gap-3 mb-6">
+            <div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+                <i class="bi bi-credit-card text-white text-xl"></i>
+            </div>
+            <div>
+                <h2 class="text-xl font-semibold text-white">Desglose por Método de Pago</h2>
+                <p class="text-gray-400 text-sm">Comparativa de ventas por período</p>
+            </div>
+        </div>
+
+        <!-- Tabs para Semana y Mes -->
+        <div class="mb-6">
+            <div class="flex gap-2 bg-dark-700/50 p-1 rounded-xl w-fit">
+                <button onclick="mostrarPeriodo('semana')" id="btn-semana" class="px-6 py-2 rounded-lg font-semibold transition-all bg-blue-600 text-white">
+                    Semana
+                </button>
+                <button onclick="mostrarPeriodo('mes')" id="btn-mes" class="px-6 py-2 rounded-lg font-semibold transition-all text-gray-400 hover:text-white">
+                    Mes
+                </button>
+            </div>
+        </div>
+
+        <!-- Desglose Semana -->
+        <div id="desglose-semana" class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <?php 
+            $totalSemana = $ventasEfectivoSemana + $ventasDebitoSemana + $ventasCreditoSemana + $ventasTransferenciaSemana;
+            $metodosPagoSemana = [
+                [
+                    'nombre' => 'Efectivo',
+                    'icon' => 'cash-coin',
+                    'color' => 'green',
+                    'monto' => $ventasEfectivoSemana,
+                    'porcentaje' => $totalSemana > 0 ? ($ventasEfectivoSemana / $totalSemana) * 100 : 0
+                ],
+                [
+                    'nombre' => 'Débito',
+                    'icon' => 'credit-card',
+                    'color' => 'blue',
+                    'monto' => $ventasDebitoSemana,
+                    'porcentaje' => $totalSemana > 0 ? ($ventasDebitoSemana / $totalSemana) * 100 : 0
+                ],
+                [
+                    'nombre' => 'Crédito',
+                    'icon' => 'credit-card-fill',
+                    'color' => 'purple',
+                    'monto' => $ventasCreditoSemana,
+                    'porcentaje' => $totalSemana > 0 ? ($ventasCreditoSemana / $totalSemana) * 100 : 0
+                ],
+                [
+                    'nombre' => 'Transferencia',
+                    'icon' => 'bank',
+                    'color' => 'indigo',
+                    'monto' => $ventasTransferenciaSemana,
+                    'porcentaje' => $totalSemana > 0 ? ($ventasTransferenciaSemana / $totalSemana) * 100 : 0
+                ]
+            ];
+
+            foreach ($metodosPagoSemana as $metodo):
+            ?>
+                <div class="bg-dark-600/30 rounded-xl p-4 border border-dark-500/50 hover:border-<?= $metodo['color'] ?>-500/30 transition-colors">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="w-10 h-10 bg-<?= $metodo['color'] ?>-600/20 rounded-lg flex items-center justify-center">
+                            <i class="bi bi-<?= $metodo['icon'] ?> text-<?= $metodo['color'] ?>-400 text-lg"></i>
+                        </div>
+                        <span class="text-xs text-<?= $metodo['color'] ?>-400 font-semibold bg-<?= $metodo['color'] ?>-600/10 px-2 py-1 rounded">
+                            <?= number_format($metodo['porcentaje'], 0) ?>%
+                        </span>
+                    </div>
+                    <h4 class="text-gray-400 text-xs mb-1"><?= $metodo['nombre'] ?></h4>
+                    <p class="text-white text-xl font-bold">$<?= number_format($metodo['monto'], 2) ?></p>
+                    
+                    <div class="mt-3 w-full bg-dark-700 rounded-full h-1">
+                        <div class="bg-<?= $metodo['color'] ?>-500 h-1 rounded-full transition-all" 
+                             style="width: <?= $metodo['porcentaje'] ?>%"></div>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        </div>
+
+        <!-- Desglose Mes -->
+        <div id="desglose-mes" class="grid grid-cols-2 md:grid-cols-4 gap-4 hidden">
+            <?php 
+            $totalMes = $ventasEfectivoMes + $ventasDebitoMes + $ventasCreditoMes + $ventasTransferenciaMes;
+            $metodosPagoMes = [
+                [
+                    'nombre' => 'Efectivo',
+                    'icon' => 'cash-coin',
+                    'color' => 'green',
+                    'monto' => $ventasEfectivoMes,
+                    'porcentaje' => $totalMes > 0 ? ($ventasEfectivoMes / $totalMes) * 100 : 0
+                ],
+                [
+                    'nombre' => 'Débito',
+                    'icon' => 'credit-card',
+                    'color' => 'blue',
+                    'monto' => $ventasDebitoMes,
+                    'porcentaje' => $totalMes > 0 ? ($ventasDebitoMes / $totalMes) * 100 : 0
+                ],
+                [
+                    'nombre' => 'Crédito',
+                    'icon' => 'credit-card-fill',
+                    'color' => 'purple',
+                    'monto' => $ventasCreditoMes,
+                    'porcentaje' => $totalMes > 0 ? ($ventasCreditoMes / $totalMes) * 100 : 0
+                ],
+                [
+                    'nombre' => 'Transferencia',
+                    'icon' => 'bank',
+                    'color' => 'indigo',
+                    'monto' => $ventasTransferenciaMes,
+                    'porcentaje' => $totalMes > 0 ? ($ventasTransferenciaMes / $totalMes) * 100 : 0
+                ]
+            ];
+
+            foreach ($metodosPagoMes as $metodo):
+            ?>
+                <div class="bg-dark-600/30 rounded-xl p-4 border border-dark-500/50 hover:border-<?= $metodo['color'] ?>-500/30 transition-colors">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="w-10 h-10 bg-<?= $metodo['color'] ?>-600/20 rounded-lg flex items-center justify-center">
+                            <i class="bi bi-<?= $metodo['icon'] ?> text-<?= $metodo['color'] ?>-400 text-lg"></i>
+                        </div>
+                        <span class="text-xs text-<?= $metodo['color'] ?>-400 font-semibold bg-<?= $metodo['color'] ?>-600/10 px-2 py-1 rounded">
+                            <?= number_format($metodo['porcentaje'], 0) ?>%
+                        </span>
+                    </div>
+                    <h4 class="text-gray-400 text-xs mb-1"><?= $metodo['nombre'] ?></h4>
+                    <p class="text-white text-xl font-bold">$<?= number_format($metodo['monto'], 2) ?></p>
+                    
+                    <div class="mt-3 w-full bg-dark-700 rounded-full h-1">
+                        <div class="bg-<?= $metodo['color'] ?>-500 h-1 rounded-full transition-all" 
+                             style="width: <?= $metodo['porcentaje'] ?>%"></div>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        </div>
+    </div>
+</div>
+
+<script>
+function mostrarPeriodo(periodo) {
+    // Actualizar botones
+    document.getElementById('btn-semana').classList.remove('bg-blue-600', 'text-white');
+    document.getElementById('btn-semana').classList.add('text-gray-400', 'hover:text-white');
+    document.getElementById('btn-mes').classList.remove('bg-blue-600', 'text-white');
+    document.getElementById('btn-mes').classList.add('text-gray-400', 'hover:text-white');
+    
+    // Activar botón seleccionado
+    document.getElementById('btn-' + periodo).classList.remove('text-gray-400', 'hover:text-white');
+    document.getElementById('btn-' + periodo).classList.add('bg-blue-600', 'text-white');
+    
+    // Mostrar/ocultar contenido
+    document.getElementById('desglose-semana').classList.add('hidden');
+    document.getElementById('desglose-mes').classList.add('hidden');
+    document.getElementById('desglose-' + periodo).classList.remove('hidden');
+}
+</script>
 
 <!-- Sección de Reportes PDF -->
 <?php
