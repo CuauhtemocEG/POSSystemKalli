@@ -1048,14 +1048,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     throw new Exception('ID de orden no especificado');
                 }
                 
-                // Obtener datos de la orden
-                $stmt = $pdo->prepare("SELECT * FROM ordenes o JOIN mesas m ON o.mesa_id=m.id WHERE o.id = ?");
+                // Obtener datos de la orden CON DESCUENTO MANUAL
+                $stmt = $pdo->prepare("
+                    SELECT o.*, m.nombre as mesa_nombre,
+                           COALESCE(o.aplicar_descuento_porcentaje, 0) as aplicar_descuento_porcentaje,
+                           COALESCE(o.descuento_porcentaje_valor, 0) as descuento_porcentaje_valor
+                    FROM ordenes o 
+                    JOIN mesas m ON o.mesa_id=m.id 
+                    WHERE o.id = ?
+                ");
                 $stmt->execute([$input['orden_id']]);
                 $orden = $stmt->fetch();
                 
                 if (!$orden) {
                     throw new Exception('Orden no encontrada');
                 }
+                
+                // 💰 Extraer datos del descuento manual
+                $desc_data = [
+                    'aplicar_descuento_porcentaje' => $orden['aplicar_descuento_porcentaje'],
+                    'descuento_porcentaje_valor' => $orden['descuento_porcentaje_valor']
+                ];
                 
                 // Obtener productos de la orden AGRUPADOS por producto
                 // Suma todas las cantidades del mismo producto (confirmado=1) menos las canceladas
@@ -1096,8 +1109,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 $impresora->saltoLinea();
 
-                $impresora->texto('Sucursal: ' . $configuraciones['empresa_nombre'], 'left');
-                $impresora->texto('Mesa: ' . $orden['nombre'], 'left');
+                $impresora->texto('Sucursal: ' . $configuraciones['empresa_nombre'], 'l eft');
+                $impresora->texto('Mesa: ' . $orden['mesa_nombre'], 'left');
                 $impresora->texto('Orden: #' . $orden['codigo'], 'left');
                 $impresora->texto('Fecha: ' . date('d/m/Y H:i:s', strtotime($orden['creada_en'])), 'left');
                 $impresora->saltoLinea();
@@ -1301,8 +1314,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $impresora->texto('Total Descuentos: -$' . number_format($total_descuentos_promociones, 2), 'right', true);
                 }
                 
-                // Calcular total con promociones
-                $totalCalculado = $subtotalCalculado - $total_descuentos_promociones;
+                // 💰 Calcular descuento manual por porcentaje
+                $descuento_porcentaje_aplicado = 0;
+                if ($desc_data['aplicar_descuento_porcentaje'] == 1 && $desc_data['descuento_porcentaje_valor'] > 0) {
+                    $base_descuento = $subtotalCalculado - $total_descuentos_promociones;
+                    $descuento_porcentaje_aplicado = round($base_descuento * ($desc_data['descuento_porcentaje_valor'] / 100), 2);
+                }
+                
+                // 💰 Mostrar descuento porcentaje manual si está aplicado
+                if ($descuento_porcentaje_aplicado > 0) {
+                    $impresora->saltoLinea();
+                    $impresora->linea('-', 45);
+                    $impresora->texto('DESCUENTO MANUAL APLICADO:', 'left', true);
+                    
+                    $porcentaje_str = number_format($desc_data['descuento_porcentaje_valor'], 1) . '%';
+                    $monto_desc_str = '-$' . number_format($descuento_porcentaje_aplicado, 2);
+                    
+                    // Formatear línea: Descuento XX%...........-$XXX.XX
+                    $espacios = 45 - strlen('Descuento ' . $porcentaje_str) - strlen($monto_desc_str);
+                    $linea = 'Descuento ' . $porcentaje_str . str_repeat('.', max(1, $espacios)) . $monto_desc_str;
+                    $impresora->texto($linea, 'left');
+                    
+                    $impresora->saltoLinea();
+                    $impresora->texto('Descuento Manual: -$' . number_format($descuento_porcentaje_aplicado, 2), 'right', true);
+                }
+                
+                // Calcular total con promociones Y descuento manual
+                $totalCalculado = $subtotalCalculado - $total_descuentos_promociones - $descuento_porcentaje_aplicado;
                 
                 // Total
                 $impresora->saltoLinea();

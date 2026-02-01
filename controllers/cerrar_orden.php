@@ -669,8 +669,26 @@ try {
                 $impresora->texto('Total Descuentos: -$' . number_format($total_descuentos_promociones, 2), 'right', true);
             }
             
-            // Calcular total con promociones
-            $totalFinal = $subtotalCalculado - $total_descuentos_promociones;
+            // 💰 Mostrar descuento porcentaje manual si está aplicado
+            if ($descuento_porcentaje_aplicado > 0) {
+                $impresora->saltoLinea();
+                $impresora->linea('-', 45);
+                $impresora->texto('DESCUENTO MANUAL APLICADO:', 'left', true);
+                
+                $porcentaje_str = number_format($desc_data['descuento_porcentaje_valor'], 1) . '%';
+                $monto_desc_str = '-$' . number_format($descuento_porcentaje_aplicado, 2);
+                
+                // Formatear línea: Descuento XX%...........-$XXX.XX
+                $espacios = 45 - strlen('Descuento ' . $porcentaje_str) - strlen($monto_desc_str);
+                $linea = 'Descuento ' . $porcentaje_str . str_repeat('.', max(1, $espacios)) . $monto_desc_str;
+                $impresora->texto($linea, 'left');
+                
+                $impresora->saltoLinea();
+                $impresora->texto('Descuento Manual: -$' . number_format($descuento_porcentaje_aplicado, 2), 'right', true);
+            }
+            
+            // Calcular total con promociones Y descuento manual
+            $totalFinal = $subtotalCalculado - $total_descuentos_promociones - $descuento_porcentaje_aplicado;
             
             // Total
             $impresora->saltoLinea();

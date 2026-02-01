@@ -205,7 +205,9 @@ function cargarBar(showLoading = true) {
           mesas[item.mesa] = {
             nombre: item.mesa,
             productos: [],
-            op_id: item.op_id
+            op_id: item.op_id,
+            prioridad: item.op_id, // Menor op_id = mayor prioridad (llegó primero)
+            tiempo_orden: item.op_id // Para referencia
           };
           stats.mesasActivas++;
         }
@@ -241,8 +243,36 @@ function cargarBar(showLoading = true) {
       } else {
         html = '<div class="grid-masonry">';
         
-        for (const nombreMesa in mesas) {
-          const mesa = mesas[nombreMesa];
+        // Ordenar mesas por prioridad (op_id más bajo primero = llegó primero)
+        const mesasOrdenadas = Object.entries(mesas).sort((a, b) => {
+          return a[1].prioridad - b[1].prioridad;
+        });
+        
+        // Calcular índice de urgencia para cada mesa
+        const totalMesas = mesasOrdenadas.length;
+        
+        mesasOrdenadas.forEach(([nombreMesa, mesa], index) => {
+          // Determinar nivel de prioridad visual
+          let prioridadBadge = '';
+          let prioridadColor = '';
+          
+          if (index < totalMesas * 0.3) { // Top 30% - Alta prioridad
+            prioridadBadge = `
+              <div class="absolute top-2 right-2 z-10">
+                <span class="inline-flex items-center px-2 py-1 bg-red-500/90 text-white rounded-lg text-xs font-bold shadow-lg animate-pulse">
+                  <i class="bi bi-exclamation-triangle-fill mr-1"></i>URGENTE
+                </span>
+              </div>`;
+            prioridadColor = 'border-red-500/50 shadow-red-500/20';
+          } else if (index < totalMesas * 0.6) { // 30-60% - Prioridad media
+            prioridadBadge = `
+              <div class="absolute top-2 right-2 z-10">
+                <span class="inline-flex items-center px-2 py-1 bg-orange-500/80 text-white rounded-lg text-xs font-semibold">
+                  <i class="bi bi-clock-fill mr-1"></i>Atender pronto
+                </span>
+              </div>`;
+            prioridadColor = 'border-orange-500/30';
+          }
           
           // Calculate mesa status
           let totalFaltan = 0;
@@ -271,7 +301,8 @@ function cargarBar(showLoading = true) {
           
           html += `
             <div class="grid-item">
-              <div class="order-card bg-gradient-to-br from-dark-700/40 to-dark-800/40 backdrop-blur-xl rounded-2xl border border-dark-600/50 overflow-hidden shadow-xl">
+              <div class="order-card bg-gradient-to-br from-dark-700/40 to-dark-800/40 backdrop-blur-xl rounded-2xl border ${prioridadColor || 'border-dark-600/50'} overflow-hidden shadow-xl relative">
+                ${prioridadBadge}
                 <!-- Header -->
                 <div class="bg-gradient-to-r from-${statusColor}-500/20 to-${statusColor}-600/10 p-4 border-b border-dark-600/50">
                   <div class="flex items-center justify-between">
@@ -400,7 +431,7 @@ function cargarBar(showLoading = true) {
               </div>
             </div>
           `;
-        }
+        }); // Cierre del forEach de mesasOrdenadas
         
         html += '</div>';
       }
