@@ -199,63 +199,82 @@ function calcularDescuento($promo, $productos) {
     
     switch ($promo['tipo']) {
         case '2x1':
-            // Por cada 2 productos, el de menor valor es gratis
-            $grupos = floor(count($productos) / 2);
-            $productos_desc = [];
+            // LÓGICA: De todos los productos elegibles, descontar los más baratos globalmente
+            // Por cada 2 productos = 1 gratis (el más barato de TODOS)
+            // Ejemplo: 4 productos = 2 grupos = descuentan los 2 MÁS BARATOS de los 4
             
-            for ($i = 0; $i < $grupos; $i++) {
-                $idx1 = $i * 2;
-                $idx2 = $idx1 + 1;
+            $num_grupos = floor(count($productos) / 2);
+            
+            // DEBUG: Log de productos antes de ordenar
+            error_log("=== DEBUG 2x1 ===");
+            error_log("Productos ANTES de ordenar: " . json_encode(array_map(function($p) {
+                return ['nombre' => $p['nombre'], 'precio' => $p['precio']];
+            }, $productos)));
+            error_log("Número de grupos: " . $num_grupos);
+            
+            if ($num_grupos > 0) {
+                // Ordenar de MENOR a MAYOR para tomar los más baratos al inicio
+                usort($productos, function($a, $b) {
+                    return $a['precio'] <=> $b['precio']; // Ascendente
+                });
                 
-                if (isset($productos[$idx2])) {
-                    // El más barato es gratis
-                    $precio1 = $productos[$idx1]['precio'];
-                    $precio2 = $productos[$idx2]['precio'];
-                    $descuento_item = min($precio1, $precio2);
-                    $producto_gratis = $precio1 < $precio2 ? $productos[$idx1]['nombre'] : $productos[$idx2]['nombre'];
+                // DEBUG: Log de productos después de ordenar
+                error_log("Productos DESPUÉS de ordenar: " . json_encode(array_map(function($p) {
+                    return ['nombre' => $p['nombre'], 'precio' => $p['precio']];
+                }, $productos)));
+                
+                $productos_desc = [];
+                
+                // Descontar los N productos más baratos (donde N = número de grupos)
+                for ($i = 0; $i < $num_grupos; $i++) {
+                    $producto_desc = $productos[$i];
+                    $resultado['monto'] += $producto_desc['precio'];
+                    $productos_desc[] = $producto_desc['nombre'];
                     
-                    $resultado['monto'] += $descuento_item;
-                    $resultado['productos_afectados'][] = $productos[$idx1]['orden_producto_id'];
-                    $resultado['productos_afectados'][] = $productos[$idx2]['orden_producto_id'];
-                    $productos_desc[] = $producto_gratis;
+                    // DEBUG: Log cada producto descontado
+                    error_log("Descontando producto #" . ($i+1) . ": " . $producto_desc['nombre'] . " - $" . $producto_desc['precio']);
                 }
-            }
-            
-            if (!empty($productos_desc)) {
+                
+                // DEBUG: Log del total de descuento
+                error_log("Total de descuento 2x1: $" . $resultado['monto']);
+                error_log("Productos gratis: " . implode(', ', $productos_desc));
+                
+                // Añadir TODOS los productos al array de afectados
+                foreach ($productos as $prod) {
+                    $resultado['productos_afectados'][] = $prod['orden_producto_id'];
+                }
+                
                 $resultado['detalle'] = '2x1 aplicado: ' . implode(', ', array_unique($productos_desc)) . ' gratis';
             }
             break;
             
         case '3x2':
-            // Por cada 3 productos, el de menor valor es gratis
-            $grupos = floor(count($productos) / 3);
-            $productos_desc = [];
+            // LÓGICA: De todos los productos elegibles, descontar los más baratos globalmente
+            // Por cada 3 productos = 1 gratis (el más barato de TODOS)
+            // Ejemplo: 6 productos = 2 grupos = descuentan los 2 MÁS BARATOS de los 6
             
-            for ($i = 0; $i < $grupos; $i++) {
-                $idx1 = $i * 3;
-                $idx2 = $idx1 + 1;
-                $idx3 = $idx1 + 2;
+            $num_grupos = floor(count($productos) / 3);
+            
+            if ($num_grupos > 0) {
+                // Ordenar de MENOR a MAYOR para tomar los más baratos al inicio
+                usort($productos, function($a, $b) {
+                    return $a['precio'] <=> $b['precio']; // Ascendente
+                });
                 
-                if (isset($productos[$idx3])) {
-                    // El más barato de los 3 es gratis
-                    $precios = [
-                        $productos[$idx1]['precio'],
-                        $productos[$idx2]['precio'],
-                        $productos[$idx3]['precio']
-                    ];
-                    $precio_min = min($precios);
-                    $idx_min = array_search($precio_min, $precios);
-                    $producto_gratis = $productos[$idx1 + $idx_min]['nombre'];
-                    
-                    $resultado['monto'] += $precio_min;
-                    $resultado['productos_afectados'][] = $productos[$idx1]['orden_producto_id'];
-                    $resultado['productos_afectados'][] = $productos[$idx2]['orden_producto_id'];
-                    $resultado['productos_afectados'][] = $productos[$idx3]['orden_producto_id'];
-                    $productos_desc[] = $producto_gratis;
+                $productos_desc = [];
+                
+                // Descontar los N productos más baratos (donde N = número de grupos)
+                for ($i = 0; $i < $num_grupos; $i++) {
+                    $producto_desc = $productos[$i];
+                    $resultado['monto'] += $producto_desc['precio'];
+                    $productos_desc[] = $producto_desc['nombre'];
                 }
-            }
-            
-            if (!empty($productos_desc)) {
+                
+                // Añadir TODOS los productos al array de afectados
+                foreach ($productos as $prod) {
+                    $resultado['productos_afectados'][] = $prod['orden_producto_id'];
+                }
+                
                 $resultado['detalle'] = '3x2 aplicado: ' . implode(', ', array_unique($productos_desc)) . ' gratis';
             }
             break;

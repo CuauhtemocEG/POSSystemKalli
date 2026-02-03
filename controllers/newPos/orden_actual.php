@@ -259,36 +259,38 @@ if (!$aplicar_promociones || $es_para_llevar) {
         
         switch ($promo['tipo']) {
             case '2x1':
-                $grupos = floor(count($productos_elegibles) / 2);
-                for ($i = 0; $i < $grupos; $i++) {
-                    $idx_mas_barato = $i * 2; // Primer item del par (más barato)
-                    $idx_segundo = $idx_mas_barato + 1;
-                    
-                    if (isset($productos_elegibles[$idx_segundo])) {
-                        // El más barato del par es gratis
-                        $monto_descuento += $productos_elegibles[$idx_mas_barato]['precio'];
-                        $productos_afectados[] = $productos_elegibles[$idx_mas_barato]['orden_producto_id'];
-                        $productos_afectados[] = $productos_elegibles[$idx_segundo]['orden_producto_id'];
-                    }
+                // LÓGICA: Descontar los N productos MÁS BARATOS globalmente (donde N = número de grupos)
+                // Ya están ordenados de menor a mayor precio
+                $num_grupos = floor(count($productos_elegibles) / 2);
+                
+                // Descontar los N productos más baratos (los primeros N elementos)
+                for ($i = 0; $i < $num_grupos; $i++) {
+                    $monto_descuento += $productos_elegibles[$i]['precio'];
                 }
+                
+                // Marcar TODOS los productos como afectados
+                foreach ($productos_elegibles as $prod) {
+                    $productos_afectados[] = $prod['orden_producto_id'];
+                }
+                
                 $detalle = '2x1 aplicado';
                 break;
                 
             case '3x2':
-                $grupos = floor(count($productos_elegibles) / 3);
-                for ($i = 0; $i < $grupos; $i++) {
-                    $idx_mas_barato = $i * 3; // Primer item del trio (más barato)
-                    $idx2 = $idx_mas_barato + 1;
-                    $idx3 = $idx_mas_barato + 2;
-                    
-                    if (isset($productos_elegibles[$idx3])) {
-                        // El más barato del trio es gratis
-                        $monto_descuento += $productos_elegibles[$idx_mas_barato]['precio'];
-                        $productos_afectados[] = $productos_elegibles[$idx_mas_barato]['orden_producto_id'];
-                        $productos_afectados[] = $productos_elegibles[$idx2]['orden_producto_id'];
-                        $productos_afectados[] = $productos_elegibles[$idx3]['orden_producto_id'];
-                    }
+                // LÓGICA: Descontar los N productos MÁS BARATOS globalmente (donde N = número de grupos)
+                // Ya están ordenados de menor a mayor precio
+                $num_grupos = floor(count($productos_elegibles) / 3);
+                
+                // Descontar los N productos más baratos (los primeros N elementos)
+                for ($i = 0; $i < $num_grupos; $i++) {
+                    $monto_descuento += $productos_elegibles[$i]['precio'];
                 }
+                
+                // Marcar TODOS los productos como afectados
+                foreach ($productos_elegibles as $prod) {
+                    $productos_afectados[] = $prod['orden_producto_id'];
+                }
+                
                 $detalle = '3x2 aplicado';
                 break;
                 
