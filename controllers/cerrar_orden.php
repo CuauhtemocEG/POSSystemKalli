@@ -168,16 +168,17 @@ try {
                         $total_items = count($items_expandidos);
                         $pares = floor($total_items / 2);
                         
-                        // Aplicar descuento: en cada par, el más barato es gratis
-                        for ($par = 0; $par < $pares; $par++) {
-                            $indice_item_gratis = $par * 2; // Primer item del par (más barato)
-                            $item_gratis = $items_expandidos[$indice_item_gratis];
+                        // Aplicar descuento: descontar los N productos más baratos (donde N = número de pares)
+                        // Ejemplo: [70, 70, 85, 85] -> 2 pares -> descontar índices 0 y 1 (los 2 de $70)
+                        for ($i = 0; $i < $pares; $i++) {
+                            $item_gratis = $items_expandidos[$i];
                             $monto_descuento += $item_gratis['precio'];
                             $productos_afectados[] = $item_gratis['orden_producto_id'];
-                            
-                            // Agregar el segundo item del par también a productos afectados
-                            $segundo_item = $items_expandidos[$indice_item_gratis + 1];
-                            $productos_afectados[] = $segundo_item['orden_producto_id'];
+                        }
+                        
+                        // Marcar TODOS los productos como afectados por la promoción
+                        foreach ($items_expandidos as $item) {
+                            $productos_afectados[] = $item['orden_producto_id'];
                         }
                         break;
                         
@@ -198,16 +199,17 @@ try {
                         $total_items = count($items_expandidos);
                         $grupos = floor($total_items / 3);
                         
-                        // Aplicar descuento: en cada trio, el más barato es gratis
-                        for ($grupo = 0; $grupo < $grupos; $grupo++) {
-                            $indice_item_gratis = $grupo * 3; // Primer item del trio (más barato)
-                            $item_gratis = $items_expandidos[$indice_item_gratis];
+                        // Aplicar descuento: descontar los N productos más baratos (donde N = número de grupos)
+                        // Ejemplo: [70, 70, 85, 85, 85, 85] -> 2 grupos -> descontar índices 0 y 1 (los 2 de $70)
+                        for ($i = 0; $i < $grupos; $i++) {
+                            $item_gratis = $items_expandidos[$i];
                             $monto_descuento += $item_gratis['precio'];
                             $productos_afectados[] = $item_gratis['orden_producto_id'];
-                            
-                            // Agregar los otros dos items del trio también a productos afectados
-                            $productos_afectados[] = $items_expandidos[$indice_item_gratis + 1]['orden_producto_id'];
-                            $productos_afectados[] = $items_expandidos[$indice_item_gratis + 2]['orden_producto_id'];
+                        }
+                        
+                        // Marcar TODOS los productos como afectados por la promoción
+                        foreach ($items_expandidos as $item) {
+                            $productos_afectados[] = $item['orden_producto_id'];
                         }
                         break;
                         
@@ -475,181 +477,43 @@ try {
                 $impresora->tablaProductos($productos);
             }
             
-            // Calcular subtotal antes de descuentos
-            $subtotalCalculado = 0;
-            foreach ($productos as $producto) {
-                $subtotalCalculado += $producto['cantidad'] * $producto['precio'];
-            }
+            // ✅ USAR SUBTOTAL YA CALCULADO (no recalcular)
+            // El subtotal ($subtotal) ya fue calculado correctamente en la línea 63
+            // y guardado en la base de datos
             
             $impresora->saltoLinea();
-            $impresora->texto('Subtotal: $' . number_format($subtotalCalculado, 2), 'right');
+            $impresora->texto('Subtotal: $' . number_format($subtotal, 2), 'right');
             
-            // 🎁 Calcular y mostrar promociones
-            $promociones = [];
-            $total_descuentos_promociones = 0;
+            // 🎁 USAR LOS DATOS DE PROMOCIONES YA CALCULADOS (no recalcular)
+            // Los valores de $total_descuentos_promociones y $promociones_a_guardar 
+            // ya fueron calculados correctamente en las líneas 65-240
             
-            try {
-                // Preparar productos para calcular promociones
-                $productosParaPromociones = [];
-                foreach ($productos as $prod) {
-                    for ($i = 0; $i < $prod['cantidad']; $i++) {
-                        $productosParaPromociones[] = [
-                            'producto_id' => $prod['id'],
-                            'nombre' => $prod['nombre'],
-                            'precio' => floatval($prod['precio']),
-                            'categoria' => $prod['categoria'] ?? ''
+            // Obtener nombres de las promociones aplicadas para mostrar en el ticket
+            $promociones_ticket = [];
+            if (!empty($promociones_a_guardar)) {
+                foreach ($promociones_a_guardar as $promo_guardada) {
+                    $stmtPromoNombre = $pdo->prepare("SELECT nombre, tipo FROM promociones WHERE id = ?");
+                    $stmtPromoNombre->execute([$promo_guardada['promocion_id']]);
+                    $promo_info = $stmtPromoNombre->fetch(PDO::FETCH_ASSOC);
+                    
+                    if ($promo_info) {
+                        $promociones_ticket[] = [
+                            'nombre' => $promo_info['nombre'],
+                            'tipo' => $promo_info['tipo'],
+                            'monto' => $promo_guardada['descuento'],
+                            'detalle' => ''
                         ];
                     }
                 }
-                
-                // Obtener promociones activas
-                $stmtPromo = $pdo->query("
-                    SELECT p.*
-                    FROM promociones p
-                    WHERE p.activa = 1
-                    AND (p.fecha_inicio IS NULL OR p.fecha_inicio <= NOW())
-                    AND (p.fecha_fin IS NULL OR p.fecha_fin >= NOW())
-                    ORDER BY p.prioridad DESC, p.id DESC
-                ");
-                $promociones_activas = $stmtPromo->fetchAll(PDO::FETCH_ASSOC);
-                
-                $productos_usados_ids = [];
-                
-                foreach ($promociones_activas as $promo) {
-                    // Filtrar productos elegibles
-                    $productos_elegibles = [];
-                    
-                    if ($promo['aplica_a'] === 'todos') {
-                        foreach ($productosParaPromociones as $idx => $prod) {
-                            if (!in_array($idx, $productos_usados_ids)) {
-                                $productos_elegibles[] = array_merge($prod, ['idx' => $idx]);
-                            }
-                        }
-                    } elseif ($promo['aplica_a'] === 'productos') {
-                        $stmtPromoProd = $pdo->prepare("SELECT producto_id FROM promocion_productos WHERE promocion_id = ?");
-                        $stmtPromoProd->execute([$promo['id']]);
-                        $productos_promo = $stmtPromoProd->fetchAll(PDO::FETCH_COLUMN);
-                        
-                        foreach ($productosParaPromociones as $idx => $prod) {
-                            if (in_array($prod['producto_id'], $productos_promo) && !in_array($idx, $productos_usados_ids)) {
-                                $productos_elegibles[] = array_merge($prod, ['idx' => $idx]);
-                            }
-                        }
-                    } elseif ($promo['aplica_a'] === 'categorias') {
-                        $stmtPromoCat = $pdo->prepare("SELECT categoria FROM promocion_categorias WHERE promocion_id = ?");
-                        $stmtPromoCat->execute([$promo['id']]);
-                        $categorias_promo = $stmtPromoCat->fetchAll(PDO::FETCH_COLUMN);
-                        
-                        foreach ($productosParaPromociones as $idx => $prod) {
-                            if (in_array($prod['categoria'], $categorias_promo) && !in_array($idx, $productos_usados_ids)) {
-                                $productos_elegibles[] = array_merge($prod, ['idx' => $idx]);
-                            }
-                        }
-                    }
-                    
-                    if (count($productos_elegibles) < $promo['minimo_productos']) {
-                        continue;
-                    }
-                    
-                    // Ordenar por precio descendente si aplica
-                    if ($promo['aplicar_mayor_valor']) {
-                        usort($productos_elegibles, function($a, $b) {
-                            return $b['precio'] <=> $a['precio'];
-                        });
-                    }
-                    
-                    // Calcular descuento según tipo
-                    $monto_descuento = 0;
-                    $detalle = '';
-                    $productos_afectados = [];
-                    
-                    switch ($promo['tipo']) {
-                        case '2x1':
-                            $grupos = floor(count($productos_elegibles) / 2);
-                            for ($i = 0; $i < $grupos; $i++) {
-                                $idx1 = $i * 2;
-                                $idx2 = $idx1 + 1;
-                                if (isset($productos_elegibles[$idx2])) {
-                                    $precio1 = $productos_elegibles[$idx1]['precio'];
-                                    $precio2 = $productos_elegibles[$idx2]['precio'];
-                                    $monto_descuento += min($precio1, $precio2);
-                                    $productos_afectados[] = $productos_elegibles[$idx1]['idx'];
-                                    $productos_afectados[] = $productos_elegibles[$idx2]['idx'];
-                                }
-                            }
-                            $detalle = '2x1 aplicado';
-                            break;
-                            
-                        case '3x2':
-                            $grupos = floor(count($productos_elegibles) / 3);
-                            for ($i = 0; $i < $grupos; $i++) {
-                                $idx1 = $i * 3;
-                                $idx2 = $idx1 + 1;
-                                $idx3 = $idx1 + 2;
-                                if (isset($productos_elegibles[$idx3])) {
-                                    $precios = [
-                                        $productos_elegibles[$idx1]['precio'],
-                                        $productos_elegibles[$idx2]['precio'],
-                                        $productos_elegibles[$idx3]['precio']
-                                    ];
-                                    $monto_descuento += min($precios);
-                                    $productos_afectados[] = $productos_elegibles[$idx1]['idx'];
-                                    $productos_afectados[] = $productos_elegibles[$idx2]['idx'];
-                                    $productos_afectados[] = $productos_elegibles[$idx3]['idx'];
-                                }
-                            }
-                            $detalle = '3x2 aplicado';
-                            break;
-                            
-                        case 'descuento_porcentaje':
-                        case 'descuento_personal':
-                            $porcentaje = floatval($promo['valor']);
-                            foreach ($productos_elegibles as $prod) {
-                                $descuento_item = $prod['precio'] * $porcentaje / 100;
-                                $monto_descuento += $descuento_item;
-                                $productos_afectados[] = $prod['idx'];
-                            }
-                            $detalle = sprintf('%d%% de descuento', $porcentaje);
-                            break;
-                            
-                        case 'descuento_fijo':
-                            $monto_descuento = floatval($promo['valor']);
-                            foreach ($productos_elegibles as $prod) {
-                                $productos_afectados[] = $prod['idx'];
-                            }
-                            $detalle = sprintf('Descuento fijo de $%.2f', $monto_descuento);
-                            break;
-                    }
-                    
-                    if ($monto_descuento > 0) {
-                        $promociones[] = [
-                            'nombre' => $promo['nombre'],
-                            'tipo' => $promo['tipo'],
-                            'monto' => round($monto_descuento, 2),
-                            'detalle' => $detalle
-                        ];
-                        
-                        $total_descuentos_promociones += $monto_descuento;
-                        
-                        // Marcar productos como usados
-                        foreach (array_unique($productos_afectados) as $prod_id) {
-                            if (!in_array($prod_id, $productos_usados_ids)) {
-                                $productos_usados_ids[] = $prod_id;
-                            }
-                        }
-                    }
-                }
-            } catch (Exception $e) {
-                error_log("Error calculando promociones en ticket: " . $e->getMessage());
             }
             
             // Mostrar promociones en el ticket
-            if (count($promociones) > 0) {
+            if (count($promociones_ticket) > 0) {
                 $impresora->saltoLinea();
                 $impresora->linea('-', 45);
                 $impresora->texto('PROMOCIONES APLICADAS:', 'left', true);
                 
-                foreach ($promociones as $promo) {
+                foreach ($promociones_ticket as $promo) {
                     // Limitar nombre a 25 caracteres
                     $nombrePromo = substr($promo['nombre'], 0, 25);
                     $montoPromo = '-$' . number_format($promo['monto'], 2);
@@ -658,11 +522,6 @@ try {
                     $espacios = 45 - strlen($nombrePromo) - strlen($montoPromo);
                     $linea = $nombrePromo . str_repeat('.', max(1, $espacios)) . $montoPromo;
                     $impresora->texto($linea, 'left');
-                    
-                    // Mostrar detalle en línea siguiente
-                    if (!empty($promo['detalle'])) {
-                        $impresora->texto('  ' . $promo['detalle'], 'left');
-                    }
                 }
                 
                 $impresora->saltoLinea();
@@ -687,13 +546,14 @@ try {
                 $impresora->texto('Descuento Manual: -$' . number_format($descuento_porcentaje_aplicado, 2), 'right', true);
             }
             
-            // Calcular total con promociones Y descuento manual
-            $totalFinal = $subtotalCalculado - $total_descuentos_promociones - $descuento_porcentaje_aplicado;
+            // ✅ USAR TOTAL YA CALCULADO (no recalcular)
+            // El total ($total) ya fue calculado correctamente en la línea 263
+            // como: $total = $subtotal - $total_descuentos_promociones - $descuento_porcentaje_aplicado
             
             // Total
             $impresora->saltoLinea();
             $impresora->linea('=', 45);
-            $impresora->texto('TOTAL: $' . number_format($totalFinal, 2), 'right', true, 'large');
+            $impresora->texto('TOTAL: $' . number_format($total, 2), 'right', true, 'large');
             $impresora->saltoLinea();
             
             // Total en texto (crear una función temporal aquí)

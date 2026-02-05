@@ -264,6 +264,7 @@ if (!$aplicar_promociones || $es_para_llevar) {
                 $num_grupos = floor(count($productos_elegibles) / 2);
                 
                 // Descontar los N productos más baratos (los primeros N elementos)
+                // Ejemplo: 4 productos = 2 grupos = descontar índices 0 y 1 (los 2 más baratos)
                 for ($i = 0; $i < $num_grupos; $i++) {
                     $monto_descuento += $productos_elegibles[$i]['precio'];
                 }
@@ -282,6 +283,7 @@ if (!$aplicar_promociones || $es_para_llevar) {
                 $num_grupos = floor(count($productos_elegibles) / 3);
                 
                 // Descontar los N productos más baratos (los primeros N elementos)
+                // Ejemplo: 6 productos = 2 grupos = descontar índices 0 y 1 (los 2 más baratos)
                 for ($i = 0; $i < $num_grupos; $i++) {
                     $monto_descuento += $productos_elegibles[$i]['precio'];
                 }

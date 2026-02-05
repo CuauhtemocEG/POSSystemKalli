@@ -205,23 +205,11 @@ function calcularDescuento($promo, $productos) {
             
             $num_grupos = floor(count($productos) / 2);
             
-            // DEBUG: Log de productos antes de ordenar
-            error_log("=== DEBUG 2x1 ===");
-            error_log("Productos ANTES de ordenar: " . json_encode(array_map(function($p) {
-                return ['nombre' => $p['nombre'], 'precio' => $p['precio']];
-            }, $productos)));
-            error_log("Número de grupos: " . $num_grupos);
-            
             if ($num_grupos > 0) {
                 // Ordenar de MENOR a MAYOR para tomar los más baratos al inicio
                 usort($productos, function($a, $b) {
                     return $a['precio'] <=> $b['precio']; // Ascendente
                 });
-                
-                // DEBUG: Log de productos después de ordenar
-                error_log("Productos DESPUÉS de ordenar: " . json_encode(array_map(function($p) {
-                    return ['nombre' => $p['nombre'], 'precio' => $p['precio']];
-                }, $productos)));
                 
                 $productos_desc = [];
                 
@@ -230,14 +218,7 @@ function calcularDescuento($promo, $productos) {
                     $producto_desc = $productos[$i];
                     $resultado['monto'] += $producto_desc['precio'];
                     $productos_desc[] = $producto_desc['nombre'];
-                    
-                    // DEBUG: Log cada producto descontado
-                    error_log("Descontando producto #" . ($i+1) . ": " . $producto_desc['nombre'] . " - $" . $producto_desc['precio']);
                 }
-                
-                // DEBUG: Log del total de descuento
-                error_log("Total de descuento 2x1: $" . $resultado['monto']);
-                error_log("Productos gratis: " . implode(', ', $productos_desc));
                 
                 // Añadir TODOS los productos al array de afectados
                 foreach ($productos as $prod) {
