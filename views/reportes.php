@@ -100,6 +100,20 @@ $ventasDiariasMetodoPago = $pdo->query("
     ORDER BY fecha DESC, metodo_pago
 ")->fetchAll(PDO::FETCH_ASSOC);
 
+// Datos para gráfico de ventas diarias (según filtros)
+$condicionGraficoVentas = $condicionFecha ?: "creada_en >= DATE_SUB(NOW(), INTERVAL 30 DAY)";
+$ventasDiarias = $pdo->query("
+    SELECT 
+        DATE(creada_en) as fecha,
+        COUNT(*) as total_ordenes,
+        COALESCE(SUM(total), 0) as total_ventas
+    FROM ordenes 
+    WHERE estado = 'cerrada' 
+    AND $condicionGraficoVentas
+    GROUP BY DATE(creada_en)
+    ORDER BY fecha ASC
+")->fetchAll(PDO::FETCH_ASSOC);
+
 // Productos más vendidos - Solo productos preparados y no cancelados
 try {
   // Intentar con campo cancelado y preparado
@@ -1536,6 +1550,155 @@ if ($esAdministrador || hasPermission('reportes', 'ver')):
         </div>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- Gráficos de Ventas por Día -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+  <!-- Gráfico: Monto de Ventas por Día -->
+  <div class="bg-dark-700/30 backdrop-blur-xl rounded-xl border border-dark-600/50 p-6">
+    <h3 class="text-lg font-semibold text-white mb-6 flex items-center">
+      <i class="bi bi-currency-dollar text-green-400 mr-2"></i>
+      Monto de Ventas por Día
+    </h3>
+    
+    <div class="space-y-3">
+      <?php
+      $maxVenta = 0;
+      foreach ($ventasDiarias as $dia) {
+        if ($dia['total_ventas'] > $maxVenta) {
+          $maxVenta = $dia['total_ventas'];
+        }
+      }
+      
+      if (count($ventasDiarias) > 0):
+        foreach ($ventasDiarias as $dia):
+          $porcentaje = $maxVenta > 0 ? ($dia['total_ventas'] / $maxVenta) * 100 : 0;
+          $fechaFormateada = date('d/m/Y', strtotime($dia['fecha']));
+          $diaSemana = date('D', strtotime($dia['fecha']));
+          $diasSemana = ['Mon' => 'Lun', 'Tue' => 'Mar', 'Wed' => 'Mié', 'Thu' => 'Jue', 'Fri' => 'Vie', 'Sat' => 'Sáb', 'Sun' => 'Dom'];
+      ?>
+        <div>
+          <div class="flex justify-between items-center mb-2">
+            <span class="text-white font-medium text-sm">
+              <i class="bi bi-calendar3 text-green-400 mr-2"></i>
+              <?= $diasSemana[$diaSemana] ?? $diaSemana ?>, <?= $fechaFormateada ?>
+            </span>
+            <span class="text-green-400 font-bold">
+              $<?= number_format($dia['total_ventas'], 2) ?>
+            </span>
+          </div>
+          <div class="w-full bg-dark-700 rounded-full h-4">
+            <div class="bg-gradient-to-r from-green-500 to-emerald-600 h-4 rounded-full transition-all duration-300 flex items-center justify-end pr-2"
+              style="width: <?= max($porcentaje, 2) ?>%">
+              <?php if ($porcentaje > 15): ?>
+                <span class="text-xs text-white font-semibold"><?= number_format($porcentaje, 0) ?>%</span>
+              <?php endif; ?>
+            </div>
+          </div>
+        </div>
+      <?php 
+        endforeach;
+      else:
+      ?>
+        <div class="text-center py-8">
+          <i class="bi bi-graph-down text-gray-500 text-4xl mb-2"></i>
+          <p class="text-gray-400">No hay datos de ventas para el período seleccionado</p>
+        </div>
+      <?php endif; ?>
+    </div>
+    
+    <?php if (count($ventasDiarias) > 0): ?>
+      <div class="mt-6 p-4 bg-green-500/10 rounded-xl border border-green-500/30">
+        <div class="flex justify-between items-center">
+          <div>
+            <p class="text-gray-300 text-sm">Promedio Diario</p>
+            <p class="text-xl font-bold text-green-400">
+              $<?= number_format(array_sum(array_column($ventasDiarias, 'total_ventas')) / count($ventasDiarias), 2) ?>
+            </p>
+          </div>
+          <div>
+            <p class="text-gray-300 text-sm">Total Período</p>
+            <p class="text-xl font-bold text-white">
+              $<?= number_format(array_sum(array_column($ventasDiarias, 'total_ventas')), 2) ?>
+            </p>
+          </div>
+        </div>
+      </div>
+    <?php endif; ?>
+  </div>
+
+  <!-- Gráfico: Número de Órdenes por Día -->
+  <div class="bg-dark-700/30 backdrop-blur-xl rounded-xl border border-dark-600/50 p-6">
+    <h3 class="text-lg font-semibold text-white mb-6 flex items-center">
+      <i class="bi bi-receipt text-blue-400 mr-2"></i>
+      Número de Órdenes por Día
+    </h3>
+    
+    <div class="space-y-3">
+      <?php
+      $maxOrdenes = 0;
+      foreach ($ventasDiarias as $dia) {
+        if ($dia['total_ordenes'] > $maxOrdenes) {
+          $maxOrdenes = $dia['total_ordenes'];
+        }
+      }
+      
+      if (count($ventasDiarias) > 0):
+        foreach ($ventasDiarias as $dia):
+          $porcentaje = $maxOrdenes > 0 ? ($dia['total_ordenes'] / $maxOrdenes) * 100 : 0;
+          $fechaFormateada = date('d/m/Y', strtotime($dia['fecha']));
+          $diaSemana = date('D', strtotime($dia['fecha']));
+          $diasSemana = ['Mon' => 'Lun', 'Tue' => 'Mar', 'Wed' => 'Mié', 'Thu' => 'Jue', 'Fri' => 'Vie', 'Sat' => 'Sáb', 'Sun' => 'Dom'];
+      ?>
+        <div>
+          <div class="flex justify-between items-center mb-2">
+            <span class="text-white font-medium text-sm">
+              <i class="bi bi-calendar3 text-blue-400 mr-2"></i>
+              <?= $diasSemana[$diaSemana] ?? $diaSemana ?>, <?= $fechaFormateada ?>
+            </span>
+            <span class="text-blue-400 font-bold">
+              <?= $dia['total_ordenes'] ?> órdenes
+            </span>
+          </div>
+          <div class="w-full bg-dark-700 rounded-full h-4">
+            <div class="bg-gradient-to-r from-blue-500 to-cyan-600 h-4 rounded-full transition-all duration-300 flex items-center justify-end pr-2"
+              style="width: <?= max($porcentaje, 2) ?>%">
+              <?php if ($porcentaje > 15): ?>
+                <span class="text-xs text-white font-semibold"><?= number_format($porcentaje, 0) ?>%</span>
+              <?php endif; ?>
+            </div>
+          </div>
+        </div>
+      <?php 
+        endforeach;
+      else:
+      ?>
+        <div class="text-center py-8">
+          <i class="bi bi-receipt-cutoff text-gray-500 text-4xl mb-2"></i>
+          <p class="text-gray-400">No hay órdenes para el período seleccionado</p>
+        </div>
+      <?php endif; ?>
+    </div>
+    
+    <?php if (count($ventasDiarias) > 0): ?>
+      <div class="mt-6 p-4 bg-blue-500/10 rounded-xl border border-blue-500/30">
+        <div class="flex justify-between items-center">
+          <div>
+            <p class="text-gray-300 text-sm">Promedio Diario</p>
+            <p class="text-xl font-bold text-blue-400">
+              <?= number_format(array_sum(array_column($ventasDiarias, 'total_ordenes')) / count($ventasDiarias), 1) ?> órdenes
+            </p>
+          </div>
+          <div>
+            <p class="text-gray-300 text-sm">Total Órdenes</p>
+            <p class="text-xl font-bold text-white">
+              <?= array_sum(array_column($ventasDiarias, 'total_ordenes')) ?>
+            </p>
+          </div>
+        </div>
+      </div>
+    <?php endif; ?>
   </div>
 </div>
 
