@@ -34,38 +34,39 @@
   }
   
   .product-item {
-    transition: all 0.2s ease;
+    transition: all 0.3s ease;
   }
   
   .product-item:hover {
-    background: rgba(99, 102, 241, 0.1);
-    transform: translateX(4px);
+    background: rgba(99, 102, 241, 0.15);
+    transform: translateX(2px);
+    border-color: rgba(99, 102, 241, 0.5);
   }
   
   .status-badge {
     animation: pulse-soft 2s infinite;
   }
   
-  .grid-masonry {
-    column-gap: 1.5rem;
-    column-count: 1;
+  .grid-horizontal {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
   }
   
-  @media (min-width: 768px) {
-    .grid-masonry {
-      column-count: 2;
-    }
+  .order-card-horizontal {
+    width: 100%;
+  }
+  
+  .products-horizontal {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 1rem;
   }
   
   @media (min-width: 1280px) {
-    .grid-masonry {
-      column-count: 3;
+    .products-horizontal {
+      grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
     }
-  }
-  
-  .grid-item {
-    break-inside: avoid;
-    margin-bottom: 1.5rem;
   }
   
   /* Animaciones para nuevas órdenes */
@@ -295,7 +296,7 @@ function cargarCocina(showLoading = true) {
           </div>
         `;
       } else {
-        html = '<div class="grid-masonry">';
+        html = '<div class="grid-horizontal">';
         
         // Ordenar mesas por prioridad (op_id más bajo primero = llegó primero)
         const mesasOrdenadas = Object.entries(mesas).sort((a, b) => {
@@ -354,41 +355,44 @@ function cargarCocina(showLoading = true) {
           }
           
           html += `
-            <div class="grid-item">
-              <div class="order-card bg-gradient-to-br from-dark-700/40 to-dark-800/40 backdrop-blur-xl rounded-2xl border ${prioridadColor || 'border-dark-600/50'} overflow-hidden shadow-xl relative">
+            <div class="order-card-horizontal">
+              <div class="order-card bg-gradient-to-br from-dark-700/60 to-dark-800/60 backdrop-blur-xl rounded-2xl border ${prioridadColor || 'border-dark-600/50'} overflow-hidden shadow-2xl relative">
                 ${prioridadBadge}
-                <!-- Header -->
-                <div class="bg-gradient-to-r from-${statusColor}-500/20 to-${statusColor}-600/10 p-4 border-b border-dark-600/50">
-                  <div class="flex items-center justify-between mb-2">
-                    <div class="flex items-center space-x-3">
-                      <div class="w-12 h-12 bg-gradient-to-br from-${statusColor}-500 to-${statusColor}-600 rounded-xl flex items-center justify-center shadow-lg">
-                        <i class="bi bi-table text-white text-lg"></i>
+                
+                <!-- Header compacto -->
+                <div class="bg-gradient-to-r from-${statusColor}-500/20 to-${statusColor}-600/10 px-6 py-4 border-b border-dark-600/50">
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-4">
+                      <div class="w-14 h-14 bg-gradient-to-br from-${statusColor}-500 to-${statusColor}-600 rounded-xl flex items-center justify-center shadow-lg">
+                        <i class="bi bi-table text-white text-xl"></i>
                       </div>
                       <div>
-                        <h3 class="text-lg font-bold text-white">${nombreMesa}</h3>
+                        <h3 class="text-xl font-bold text-white">${nombreMesa}</h3>
                         <p class="text-xs text-gray-400">Orden #${mesa.op_id}</p>
                       </div>
                     </div>
-                    <div class="status-badge px-3 py-1 bg-${statusColor}-500/20 border border-${statusColor}-500/30 rounded-full">
-                      <div class="flex items-center space-x-2">
-                        <i class="bi bi-${statusIcon} text-${statusColor}-400 text-xs"></i>
-                        <span class="text-${statusColor}-400 text-xs font-semibold">${statusText}</span>
+                    
+                    <div class="flex items-center gap-4">
+                      <div class="flex items-center gap-4">
+                        <span class="text-sm text-gray-300 font-medium">
+                          <i class="bi bi-egg-fried mr-1.5"></i>${totalProductos} productos
+                        </span>
+                        ${totalPreparado > 0 ? `<span class="text-sm text-green-400 font-semibold"><i class="bi bi-check-lg mr-1.5"></i>${totalPreparado} listos</span>` : ''}
+                        ${totalFaltan > 0 ? `<span class="text-sm text-orange-400 font-semibold animate-pulse"><i class="bi bi-clock mr-1.5"></i>${totalFaltan} pendientes</span>` : ''}
+                      </div>
+                      
+                      <div class="status-badge px-4 py-2 bg-${statusColor}-500/20 border border-${statusColor}-500/30 rounded-full">
+                        <div class="flex items-center space-x-2">
+                          <i class="bi bi-${statusIcon} text-${statusColor}-400"></i>
+                          <span class="text-${statusColor}-400 text-sm font-semibold">${statusText}</span>
+                        </div>
                       </div>
                     </div>
                   </div>
-                  
-                  <!-- Stats quick view -->
-                  <div class="flex items-center gap-3 mt-2">
-                    <span class="text-xs text-gray-400">
-                      <i class="bi bi-egg-fried mr-1"></i>${totalProductos} productos
-                    </span>
-                    ${totalPreparado > 0 ? `<span class="text-xs text-green-400"><i class="bi bi-check-lg mr-1"></i>${totalPreparado} listos</span>` : ''}
-                    ${totalFaltan > 0 ? `<span class="text-xs text-orange-400 animate-pulse"><i class="bi bi-clock mr-1"></i>${totalFaltan} pendientes</span>` : ''}
-                  </div>
                 </div>
                 
-                <!-- Products List -->
-                <div class="p-4 space-y-2 max-h-96 overflow-y-auto">
+                <!-- Products Grid Horizontal -->
+                <div class="p-5 products-horizontal">
           `;
           
           mesa.productos.forEach(item => {
@@ -398,53 +402,55 @@ function cargarCocina(showLoading = true) {
             const cancelado = parseInt(item.cancelado);
             
             html += `
-              <div class="product-item bg-dark-600/30 rounded-xl p-3 border border-dark-500/30">
-                <div class="flex items-start justify-between mb-2">
+              <div class="product-item bg-gradient-to-br from-dark-600/50 to-dark-700/30 rounded-xl p-4 border border-dark-500/40 hover:border-indigo-500/40 transition-all duration-200">
+                <div class="flex items-start justify-between mb-3">
                   <div class="flex items-start space-x-3 flex-1">
-                    <div class="w-10 h-10 bg-gradient-to-br from-indigo-500/20 to-purple-600/20 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <i class="bi bi-egg-fried text-indigo-400"></i>
+                    <div class="w-12 h-12 bg-gradient-to-br from-indigo-500/30 to-purple-600/30 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg">
+                      <i class="bi bi-egg-fried text-indigo-400 text-lg"></i>
                     </div>
                     <div class="flex-1 min-w-0">
-                      <p class="text-white font-medium text-sm leading-tight">${item.producto}</p>
+                      <p class="text-white font-semibold text-base leading-tight mb-2">${item.producto}</p>
                       
                       ${item.variedades && item.variedades.length > 0 ? `
-                        <div class="mt-1.5 mb-1.5 pl-2 border-l-2 border-orange-500/40">
-                          <p class="text-xs text-gray-400 font-semibold mb-0.5">Notas:</p>
+                        <div class="mt-2 mb-2 pl-3 border-l-2 border-orange-500/50 bg-orange-500/5 rounded-r py-2 pr-2">
+                          <p class="text-xs text-orange-400 font-bold mb-1.5 uppercase tracking-wide flex items-center">
+                            <i class="bi bi-list-ul mr-1"></i>Especificaciones:
+                          </p>
                           ${item.variedades.map(v => `
-                            <div class="text-xs text-orange-300">
-                              <i class="bi bi-arrow-return-right text-orange-400"></i>
-                              <span class="font-medium">${v.grupo_nombre}:</span> ${v.opcion_nombre}
+                            <div class="text-sm text-orange-200 mb-1 flex items-start">
+                              <i class="bi bi-chevron-right text-orange-400 mr-1 mt-0.5"></i>
+                              <span><span class="font-semibold text-orange-300">${v.grupo_nombre}:</span> ${v.opcion_nombre}</span>
                             </div>
                           `).join('')}
                         </div>
                       ` : ''}
                       
                       ${item.nota_adicional && item.nota_adicional.trim() !== '' ? `
-                        <div class="mt-1.5 mb-1.5 pl-2 border-l-2 border-yellow-500/60 bg-yellow-500/10 rounded-r-lg pr-2 py-1">
-                          <p class="text-xs text-yellow-400 font-semibold mb-0.5 flex items-center">
-                            <i class="bi bi-sticky-fill mr-1"></i>Nota del cliente:
+                        <div class="mt-2 mb-2 pl-3 border-l-3 border-yellow-500/70 bg-yellow-500/10 rounded-r-lg pr-3 py-2.5">
+                          <p class="text-xs text-yellow-400 font-bold mb-1.5 uppercase tracking-wide flex items-center">
+                            <i class="bi bi-sticky-fill mr-1.5"></i>Nota especial:
                           </p>
-                          <p class="text-xs text-yellow-200 italic">${item.nota_adicional}</p>
+                          <p class="text-sm text-yellow-100 italic font-medium leading-relaxed">"${item.nota_adicional}"</p>
                         </div>
                       ` : ''}
                       
-                      <div class="flex items-center space-x-2 mt-1">
-                        <span class="inline-flex items-center px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded text-xs font-semibold">
-                          <i class="bi bi-cart-fill mr-1 text-xs"></i>${cantidad}
+                      <div class="flex items-center flex-wrap gap-2 mt-3">
+                        <span class="inline-flex items-center px-3 py-1.5 bg-blue-500/20 border border-blue-500/30 text-blue-300 rounded-lg text-sm font-bold shadow-sm">
+                          <i class="bi bi-cart-fill mr-1.5"></i>Total: ${cantidad}
                         </span>
                         ${preparado > 0 ? `
-                          <span class="inline-flex items-center px-2 py-0.5 bg-green-500/20 text-green-400 rounded text-xs font-semibold">
-                            <i class="bi bi-check-lg mr-1 text-xs"></i>${preparado}
+                          <span class="inline-flex items-center px-3 py-1.5 bg-green-500/20 border border-green-500/30 text-green-300 rounded-lg text-sm font-bold shadow-sm">
+                            <i class="bi bi-check-circle-fill mr-1.5"></i>Listos: ${preparado}
                           </span>
                         ` : ''}
                         ${cancelado > 0 ? `
-                          <span class="inline-flex items-center px-2 py-0.5 bg-red-500/20 text-red-400 rounded text-xs font-semibold">
-                            <i class="bi bi-x-lg mr-1 text-xs"></i>${cancelado}
+                          <span class="inline-flex items-center px-3 py-1.5 bg-red-500/20 border border-red-500/30 text-red-300 rounded-lg text-sm font-bold shadow-sm">
+                            <i class="bi bi-x-circle-fill mr-1.5"></i>Cancelados: ${cancelado}
                           </span>
                         ` : ''}
                         ${faltan > 0 ? `
-                          <span class="inline-flex items-center px-2 py-0.5 bg-orange-500/20 text-orange-400 rounded text-xs font-semibold animate-pulse">
-                            <i class="bi bi-clock mr-1 text-xs"></i>${faltan}
+                          <span class="inline-flex items-center px-3 py-1.5 bg-orange-500/30 border border-orange-500/50 text-orange-200 rounded-lg text-sm font-bold shadow-sm animate-pulse">
+                            <i class="bi bi-clock-fill mr-1.5"></i>Pendientes: ${faltan}
                           </span>
                         ` : ''}
                       </div>
@@ -453,26 +459,29 @@ function cargarCocina(showLoading = true) {
                 </div>
                 
                 ${faltan > 0 ? `
-                  <form class="marcar-preparado-form-cocina mt-2" data-op="${item.op_id}">
-                    <div class="flex items-center space-x-2">
-                      <input type="number" 
-                             name="marcar" 
-                             value="${Math.min(faltan, 1)}" 
-                             min="1" 
-                             max="${faltan}" 
-                             class="w-16 px-2 py-1.5 bg-dark-700/50 border border-dark-500/50 rounded-lg text-white text-sm text-center focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent">
+                  <form class="marcar-preparado-form-cocina mt-3 pt-3 border-t border-dark-500/40" data-op="${item.op_id}">
+                    <div class="flex items-center space-x-3">
+                      <div class="flex items-center space-x-2">
+                        <label class="text-xs text-gray-400 font-semibold">Cantidad:</label>
+                        <input type="number" 
+                               name="marcar" 
+                               value="${Math.min(faltan, 1)}" 
+                               min="1" 
+                               max="${faltan}" 
+                               class="w-20 px-3 py-2 bg-dark-700/70 border border-dark-500/50 rounded-lg text-white text-base font-semibold text-center focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all">
+                      </div>
                       <button type="submit" 
-                              class="flex-1 px-3 py-1.5 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-semibold rounded-lg transition-all duration-200 transform hover:scale-105 text-sm shadow-lg">
-                        <i class="bi bi-check2-circle mr-1"></i>
-                        Marcar Listo
+                              class="flex-1 px-4 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold rounded-lg transition-all duration-200 transform hover:scale-105 text-sm shadow-lg hover:shadow-xl">
+                        <i class="bi bi-check2-circle mr-2"></i>
+                        Marcar como Listo
                       </button>
                     </div>
                   </form>
                 ` : `
-                  <div class="mt-2 p-2 bg-green-500/10 rounded-lg border border-green-500/20 text-center">
-                    <span class="text-green-400 text-xs font-semibold">
-                      <i class="bi bi-check-circle-fill mr-1"></i>
-                      Completado
+                  <div class="mt-3 pt-3 border-t border-dark-500/40 p-3 bg-gradient-to-r from-green-500/10 to-emerald-600/10 rounded-lg border border-green-500/30 text-center">
+                    <span class="text-green-400 text-sm font-bold flex items-center justify-center">
+                      <i class="bi bi-check-circle-fill mr-2 text-lg"></i>
+                      ✓ Producto Completado
                     </span>
                   </div>
                 `}
