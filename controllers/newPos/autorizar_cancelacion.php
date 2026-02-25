@@ -33,7 +33,7 @@ try {
     
     // Buscar el código PIN válido
     $stmt = $pdo->prepare("
-        SELECT id, orden_id, producto_id, cantidad_solicitada, solicitado_por, razon, usado, fecha_expiracion
+        SELECT id, orden_id, producto_id, orden_producto_id, cantidad_solicitada, solicitado_por, razon, usado, fecha_expiracion
         FROM codigos_cancelacion 
         WHERE codigo = ? AND usado = 0 AND fecha_expiracion > NOW()
     ");
@@ -48,16 +48,28 @@ try {
     
     error_log("DEBUG Autorización: PIN válido encontrado, ID = " . $cancelacion['id']);
     
-    // Obtener información del producto
-    $stmt = $pdo->prepare("
-        SELECT op.id, op.cantidad, op.preparado, op.cancelado, op.pendiente_cancelacion, p.nombre
-        FROM orden_productos op
-        JOIN productos p ON op.producto_id = p.id
-        WHERE op.orden_id = ? AND op.producto_id = ? AND COALESCE(op.cancelado, 0) = 0
-        ORDER BY op.id DESC
-        LIMIT 1
-    ");
-    $stmt->execute([$cancelacion['orden_id'], $cancelacion['producto_id']]);
+    // Obtener información del producto usando orden_producto_id si existe, sino usar producto_id (fallback)
+    if ($cancelacion['orden_producto_id']) {
+        // Usar el ID específico del registro en orden_productos
+        $stmt = $pdo->prepare("
+            SELECT op.id, op.cantidad, op.preparado, op.cancelado, op.pendiente_cancelacion, p.nombre
+            FROM orden_productos op
+            JOIN productos p ON op.producto_id = p.id
+            WHERE op.id = ?
+        ");
+        $stmt->execute([$cancelacion['orden_producto_id']]);
+    } else {
+        // Fallback: usar producto_id (para compatibilidad con registros antiguos)
+        $stmt = $pdo->prepare("
+            SELECT op.id, op.cantidad, op.preparado, op.cancelado, op.pendiente_cancelacion, p.nombre
+            FROM orden_productos op
+            JOIN productos p ON op.producto_id = p.id
+            WHERE op.orden_id = ? AND op.producto_id = ? AND COALESCE(op.cancelado, 0) = 0
+            ORDER BY op.id DESC
+            LIMIT 1
+        ");
+        $stmt->execute([$cancelacion['orden_id'], $cancelacion['producto_id']]);
+    }
     $producto_orden = $stmt->fetch();
     
     if (!$producto_orden) {

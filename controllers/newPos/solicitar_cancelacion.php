@@ -99,10 +99,10 @@ try {
     
     // Guardar en base de datos con tiempo de expiración personalizado
     $stmt = $pdo->prepare("
-        INSERT INTO codigos_cancelacion (codigo, orden_id, producto_id, cantidad_solicitada, solicitado_por, razon, fecha_expiracion) 
-        VALUES (?, ?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL ? MINUTE))
+        INSERT INTO codigos_cancelacion (codigo, orden_id, producto_id, orden_producto_id, cantidad_solicitada, solicitado_por, razon, fecha_expiracion) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL ? MINUTE))
     ");
-    $stmt->execute([$codigo_pin, $orden_id, $producto_id, $cantidad_cancelar, $usuario_id, $razon, $tiempo_expiracion]);
+    $stmt->execute([$codigo_pin, $orden_id, $producto_id, $orden_producto_id, $cantidad_cancelar, $usuario_id, $razon, $tiempo_expiracion]);
     
     // NUEVO: Actualizar el campo pendiente_cancelacion en orden_productos
     if ($orden_producto_id) {

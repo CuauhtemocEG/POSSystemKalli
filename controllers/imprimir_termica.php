@@ -1048,11 +1048,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     throw new Exception('ID de orden no especificado');
                 }
                 
-                // Obtener datos de la orden CON DESCUENTO MANUAL
+                // Obtener datos de la orden CON DESCUENTO MANUAL Y ES_PERSONAL
                 $stmt = $pdo->prepare("
                     SELECT o.*, m.nombre as mesa_nombre,
                            COALESCE(o.aplicar_descuento_porcentaje, 0) as aplicar_descuento_porcentaje,
-                           COALESCE(o.descuento_porcentaje_valor, 0) as descuento_porcentaje_valor
+                           COALESCE(o.descuento_porcentaje_valor, 0) as descuento_porcentaje_valor,
+                           COALESCE(o.es_personal, 0) as es_personal,
+                           COALESCE(m.aplicar_promociones, 1) as aplicar_promociones,
+                           COALESCE(m.es_para_llevar, 0) as es_para_llevar
                     FROM ordenes o 
                     JOIN mesas m ON o.mesa_id=m.id 
                     WHERE o.id = ?
@@ -1064,11 +1067,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     throw new Exception('Orden no encontrada');
                 }
                 
-                // 💰 Extraer datos del descuento manual
+                // 💰 Extraer datos del descuento manual y es_personal
                 $desc_data = [
                     'aplicar_descuento_porcentaje' => $orden['aplicar_descuento_porcentaje'],
                     'descuento_porcentaje_valor' => $orden['descuento_porcentaje_valor']
                 ];
+                $es_personal = (bool)$orden['es_personal'];
+                $aplicar_promociones_mesa = (bool)$orden['aplicar_promociones'] && !$orden['es_para_llevar'];
                 
                 // Obtener productos de la orden AGRUPADOS por producto
                 // Suma todas las cantidades del mismo producto (confirmado=1) menos las canceladas
@@ -1109,7 +1114,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 $impresora->saltoLinea();
 
-                $impresora->texto('Sucursal: ' . $configuraciones['empresa_nombre'], 'l eft');
+                $impresora->texto('Sucursal: ' . $configuraciones['empresa_nombre'], 'left');
                 $impresora->texto('Mesa: ' . $orden['mesa_nombre'], 'left');
                 $impresora->texto('Orden: #' . $orden['codigo'], 'left');
                 $impresora->texto('Fecha: ' . date('d/m/Y H:i:s', strtotime($orden['creada_en'])), 'left');
@@ -1155,9 +1160,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $total_descuentos_promociones += floatval($promo['descuento_aplicado']);
                         }
                     } else {
-                        // Si la orden está abierta, calcular promociones correctamente
-                        // Obtener productos SIN agrupar para cálculo correcto
-                        $stmtProductosPromo = $pdo->prepare("
+                        // Si la orden está abierta, calcular promociones SOLO si la mesa tiene promociones activadas
+                        if (!$aplicar_promociones_mesa) {
+                            // No calcular promociones si están desactivadas en la mesa
+                            error_log("Promociones desactivadas para mesa en orden {$input['orden_id']}");
+                        } else {
+                            // Obtener productos SIN agrupar para cálculo correcto
+                            $stmtProductosPromo = $pdo->prepare("
                             SELECT 
                                 op.id as orden_producto_id,
                                 op.producto_id,
@@ -1188,6 +1197,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $productos_usados = [];
                         
                         foreach ($promociones_activas as $promo) {
+                            // ⚠️ Saltar promociones de descuento personal si no está activado
+                            if ($promo['tipo'] === 'descuento_personal' && !$es_personal) {
+                                continue;
+                            }
+                            
                             $productos_elegibles = [];
                             
                             // Filtrar productos elegibles según el tipo de promoción
@@ -1286,6 +1300,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     }
                                     break;
                                     
+                                case 'descuento_personal':
+                                    // Descuento personal: aplica porcentaje a todos los productos elegibles
+                                    $porcentaje = floatval($promo['valor']) / 100;
+                                    foreach ($productos_elegibles as $prod) {
+                                        $monto_descuento += ($prod['precio'] * $prod['cantidad']) * $porcentaje;
+                                        $productos_afectados[] = $prod['orden_producto_id'];
+                                    }
+                                    break;
+                                    
                                 case 'descuento_fijo':
                                     $monto_descuento = floatval($promo['valor']);
                                     foreach ($productos_elegibles as $prod) {
@@ -1305,6 +1328,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 $productos_usados = array_merge($productos_usados, array_unique($productos_afectados));
                             }
                         }
+                        } // Fin del if aplicar_promociones_mesa
                     }
                 } catch (Exception $e) {
                     error_log("Error calculando promociones en ticket: " . $e->getMessage());

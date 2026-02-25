@@ -30,10 +30,10 @@ try {
     // Primero, expirar códigos vencidos automáticamente
     $stmtExpirar = $pdo->prepare("
         UPDATE codigos_cancelacion c
-        JOIN orden_productos op ON c.orden_id = op.orden_id AND c.producto_id = op.producto_id
+        LEFT JOIN orden_productos op ON c.orden_producto_id = op.id
         SET c.usado = 1,
-            op.cancelado = GREATEST(0, op.cancelado - c.cantidad_solicitada),
-            op.pendiente_cancelacion = GREATEST(0, op.pendiente_cancelacion - c.cantidad_solicitada)
+            op.cancelado = GREATEST(0, COALESCE(op.cancelado, 0) - c.cantidad_solicitada),
+            op.pendiente_cancelacion = GREATEST(0, COALESCE(op.pendiente_cancelacion, 0) - c.cantidad_solicitada)
         WHERE c.usado = 0 
         AND TIMESTAMPDIFF(SECOND, c.fecha_creacion, NOW()) >= 600
     ");
@@ -58,7 +58,7 @@ try {
         JOIN ordenes o ON c.orden_id = o.id
         JOIN mesas m ON o.mesa_id = m.id
         JOIN usuarios u ON c.solicitado_por = u.id
-        JOIN orden_productos op ON c.orden_id = op.orden_id AND c.producto_id = op.producto_id
+        LEFT JOIN orden_productos op ON c.orden_producto_id = op.id
         WHERE c.usado = 0
         AND TIMESTAMPDIFF(SECOND, c.fecha_creacion, NOW()) < 600
         ORDER BY c.fecha_creacion DESC

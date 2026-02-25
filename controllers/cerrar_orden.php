@@ -78,6 +78,11 @@ try {
     $mesa_data = $mesa_config->fetch();
     $aplicar_promociones = ($mesa_data['aplicar_promociones'] ?? 1) && !($mesa_data['es_para_llevar'] ?? 0);
     
+    // Obtener si la orden tiene activado descuento personal
+    $stmt_personal = $pdo->prepare("SELECT COALESCE(es_personal, 0) as es_personal FROM ordenes WHERE id = ?");
+    $stmt_personal->execute([$orden_id]);
+    $es_personal = (bool)$stmt_personal->fetchColumn();
+    
     if ($aplicar_promociones) {
         try {
             // Obtener productos de la orden para calcular promociones
@@ -111,6 +116,11 @@ try {
             $productos_usados = [];
             
             foreach ($promociones_activas as $promo) {
+                // ⚠️ Saltar promociones de descuento personal si no está activado
+                if ($promo['tipo'] === 'descuento_personal' && !$es_personal) {
+                    continue;
+                }
+                
                 $productos_elegibles = [];
                 
                 // Filtrar productos elegibles según el tipo de promoción
@@ -214,6 +224,15 @@ try {
                         break;
                         
                     case 'descuento_porcentaje':
+                        $porcentaje = floatval($promo['valor']) / 100;
+                        foreach ($productos_elegibles as $prod) {
+                            $monto_descuento += ($prod['precio'] * $prod['cantidad']) * $porcentaje;
+                            $productos_afectados[] = $prod['orden_producto_id'];
+                        }
+                        break;
+                        
+                    case 'descuento_personal':
+                        // Descuento personal: aplica porcentaje a todos los productos elegibles
                         $porcentaje = floatval($promo['valor']) / 100;
                         foreach ($productos_elegibles as $prod) {
                             $monto_descuento += ($prod['precio'] * $prod['cantidad']) * $porcentaje;

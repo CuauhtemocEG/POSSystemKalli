@@ -24,7 +24,7 @@ if (!$mesa) {
     exit;
 }
 
-// Obtener orden con información del mesero
+// Obtener orden con información del mesero y configuración de descuentos
 $stmtOrden = $pdo->prepare("
     SELECT o.*, u.nombre_completo as mesero_nombre
     FROM ordenes o
@@ -38,6 +38,11 @@ $mesero_nombre = 'Sin asignar';
 if ($orden && !empty($orden['mesero_nombre'])) {
     $mesero_nombre = trim($orden['mesero_nombre']);
 }
+
+// Configuración de descuentos de la orden
+$es_personal = $orden ? ($orden['es_personal'] ?? 0) : 0;
+$aplicar_descuento_porcentaje = $orden ? ($orden['aplicar_descuento_porcentaje'] ?? 0) : 0;
+$descuento_porcentaje_valor = $orden ? ($orden['descuento_porcentaje_valor'] ?? 0) : 0;
 
 // Obtener configuración de impresión térmica
 include_once 'includes/ConfiguracionSistema.php';
@@ -493,61 +498,82 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
                         <!-- Totales fijos -->
                         <div class="kiosk-totales-section">
                             <?php if ($esAdministrador || hasPermission('ordenes', 'editar')): ?>
-                            <!-- Controles de promociones y descuentos -->
-                            <div class="space-y-2 mb-3">
-                                <!-- Toggle de Promociones para esta Mesa -->
-                                <div class="bg-gradient-to-r from-purple-500/10 to-purple-600/10 border border-purple-500/30 rounded-lg p-3">
-                                    <label class="flex items-center justify-between cursor-pointer group">
-                                        <span class="text-purple-300 font-semibold group-hover:text-purple-200 transition-colors flex items-center">
-                                            <i class="bi bi-gift mr-2"></i>Aplicar Promociones
+                            <!-- Accordion de Promociones y Descuentos -->
+                            <div class="mb-3 bg-gradient-to-br from-slate-800/60 to-slate-900/60 rounded-xl border border-slate-600/50 overflow-hidden shadow-lg">
+                                <!-- Header Colapsable -->
+                                <button type="button" 
+                                        onclick="toggleDescuentosAccordion()" 
+                                        class="w-full flex items-center justify-between px-4 py-3 bg-gradient-to-r from-slate-700/50 to-slate-800/50 hover:from-slate-700/70 hover:to-slate-800/70 transition-all duration-300 group">
+                                    <div class="flex items-center gap-2">
+                                        <i class="bi bi-tags text-blue-400 text-lg group-hover:text-blue-300 transition-colors"></i>
+                                        <span class="text-slate-200 font-bold text-sm group-hover:text-white transition-colors">
+                                            Promociones y Descuentos
                                         </span>
-                                        <div class="relative">
-                                            <input type="checkbox" id="aplicarPromociones" 
-                                                   <?= ($mesa['aplicar_promociones'] ?? 1) ? 'checked' : '' ?>
-                                                   class="sr-only peer"
-                                                   data-mesa-id="<?= $mesa_id ?>">
-                                            <div class="w-11 h-6 bg-slate-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-500/50 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
-                                        </div>
-                                    </label>
-                                    <p class="text-xs text-purple-200/60 mt-1 ml-6">
-                                        <?= ($mesa['es_para_llevar'] ?? 0) ? '📦 Orden para llevar (promociones desactivadas)' : 'Activa/desactiva promociones para esta mesa' ?>
-                                    </p>
-                                </div>
+                                    </div>
+                                    <i id="accordion-icon" class="bi bi-chevron-down text-slate-400 text-lg transition-transform duration-300 group-hover:text-slate-300"></i>
+                                </button>
                                 
-                                <!-- Checkbox de descuento personal -->
-                                <div class="bg-gradient-to-r from-yellow-500/10 to-yellow-600/10 border border-yellow-500/30 rounded-lg p-3">
-                                    <label class="flex items-center cursor-pointer group">
-                                        <input type="checkbox" id="esPersonal" class="w-5 h-5 text-yellow-500 bg-slate-700 border-slate-600 rounded focus:ring-yellow-500 focus:ring-2 cursor-pointer">
-                                        <span class="ml-3 text-yellow-300 font-semibold group-hover:text-yellow-200 transition-colors">
-                                            <i class="bi bi-person-badge mr-1"></i>Descuento Personal
-                                        </span>
-                                    </label>
-                                </div>
-                                
-                                <!-- Checkbox de descuento % manual -->
-                                <div class="bg-gradient-to-r from-orange-500/10 to-orange-600/10 border border-orange-500/30 rounded-lg p-3">
-                                    <label class="flex items-center justify-between cursor-pointer group">
-                                        <div class="flex items-center">
-                                            <input type="checkbox" id="aplicarDescuentoPorcentaje" 
-                                                   class="w-5 h-5 text-orange-500 bg-slate-700 border-slate-600 rounded focus:ring-orange-500 focus:ring-2 cursor-pointer"
-                                                   data-orden-id="<?= $orden_id ?>">
-                                            <span class="ml-3 text-orange-300 font-semibold group-hover:text-orange-200 transition-colors">
-                                                <i class="bi bi-percent mr-1"></i>Descuento %
-                                            </span>
+                                <!-- Contenido Colapsable -->
+                                <div id="descuentos-content" class="overflow-hidden transition-all duration-300 ease-in-out" style="max-height: 0;">
+                                    <div class="space-y-2 p-3">
+                                        <!-- Toggle de Promociones para esta Mesa -->
+                                        <div class="bg-gradient-to-r from-purple-500/10 to-purple-600/10 border border-purple-500/30 rounded-lg p-3">
+                                            <label class="flex items-center justify-between cursor-pointer group">
+                                                <span class="text-purple-300 font-semibold group-hover:text-purple-200 transition-colors flex items-center">
+                                                    <i class="bi bi-gift mr-2"></i>Aplicar Promociones
+                                                </span>
+                                                <div class="relative">
+                                                    <input type="checkbox" id="aplicarPromociones" 
+                                                           <?= ($mesa['aplicar_promociones'] ?? 1) ? 'checked' : '' ?>
+                                                           class="sr-only peer"
+                                                           data-mesa-id="<?= $mesa_id ?>">
+                                                    <div class="w-11 h-6 bg-slate-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-500/50 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                                                </div>
+                                            </label>
+                                            <p class="text-xs text-purple-200/60 mt-1 ml-6">
+                                                <?= ($mesa['es_para_llevar'] ?? 0) ? '📦 Orden para llevar (promociones desactivadas)' : 'Activa/desactiva promociones para esta mesa' ?>
+                                            </p>
                                         </div>
-                                        <input type="number" 
-                                               id="porcentajeDescuento" 
-                                               min="0" 
-                                               max="100" 
-                                               step="0.5"
-                                               value="0"
-                                               placeholder="%"
-                                               class="w-16 px-2 py-1 text-center bg-slate-700 border border-orange-500/50 rounded text-orange-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-orange-500"
-                                               disabled>
-                                    </label>
-                                    <p class="text-xs text-orange-200/60 mt-1 ml-8">
-                                        Aplica descuento manual por porcentaje a esta orden
-                                    </p>
+                                        
+                                        <!-- Checkbox de descuento personal -->
+                                        <div class="bg-gradient-to-r from-yellow-500/10 to-yellow-600/10 border border-yellow-500/30 rounded-lg p-3">
+                                            <label class="flex items-center cursor-pointer group">
+                                                <input type="checkbox" id="esPersonal" 
+                                                       <?= $es_personal ? 'checked' : '' ?>
+                                                       class="w-5 h-5 text-yellow-500 bg-slate-700 border-slate-600 rounded focus:ring-yellow-500 focus:ring-2 cursor-pointer">
+                                                <span class="ml-3 text-yellow-300 font-semibold group-hover:text-yellow-200 transition-colors">
+                                                    <i class="bi bi-person-badge mr-1"></i>Descuento Personal
+                                                </span>
+                                            </label>
+                                        </div>
+                                        
+                                        <!-- Checkbox de descuento % manual -->
+                                        <div class="bg-gradient-to-r from-orange-500/10 to-orange-600/10 border border-orange-500/30 rounded-lg p-3">
+                                            <label class="flex items-center justify-between cursor-pointer group">
+                                                <div class="flex items-center">
+                                                    <input type="checkbox" id="aplicarDescuentoPorcentaje" 
+                                                           <?= $aplicar_descuento_porcentaje ? 'checked' : '' ?>
+                                                           class="w-5 h-5 text-orange-500 bg-slate-700 border-slate-600 rounded focus:ring-orange-500 focus:ring-2 cursor-pointer"
+                                                           data-orden-id="<?= $orden_id ?>">
+                                                    <span class="ml-3 text-orange-300 font-semibold group-hover:text-orange-200 transition-colors">
+                                                        <i class="bi bi-percent mr-1"></i>Descuento %
+                                                    </span>
+                                                </div>
+                                                <input type="number" 
+                                                       id="porcentajeDescuento" 
+                                                       min="0" 
+                                                       max="100" 
+                                                       step="0.5"
+                                                       value="<?= number_format($descuento_porcentaje_valor, 1, '.', '') ?>"
+                                                       placeholder="%"
+                                                       class="w-16 px-2 py-1 text-center bg-slate-700 border border-orange-500/50 rounded text-orange-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                                       <?= !$aplicar_descuento_porcentaje ? 'disabled' : '' ?>>
+                                            </label>
+                                            <p class="text-xs text-orange-200/60 mt-1 ml-8">
+                                                Aplica descuento manual por porcentaje a esta orden
+                                            </p>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                             <?php endif; ?>
@@ -2574,13 +2600,84 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
         cargarProductos();
         cargarOrden();
         
+        // Restaurar estado del accordion de descuentos
+        const accordionAbierto = localStorage.getItem('descuentosAccordionAbierto');
+        if (accordionAbierto === 'true') {
+            const content = document.getElementById('descuentos-content');
+            const icon = document.getElementById('accordion-icon');
+            
+            if (content && icon) {
+                setTimeout(function() {
+                    content.style.maxHeight = content.scrollHeight + 'px';
+                    icon.style.transform = 'rotate(180deg)';
+                }, 100);
+            }
+        }
+        
         // Listener para checkbox de descuento personal
         const cbPersonal = document.getElementById('esPersonal');
         if (cbPersonal) {
             cbPersonal.addEventListener('change', function() {
-                console.log('🎁 Descuento personal:', this.checked ? 'Activado' : 'Desactivado');
-                // Recargar orden para aplicar/quitar descuento
-                cargarOrden();
+                const esPersonal = this.checked ? 1 : 0;
+                const ordenId = <?= $orden_id ?? 0 ?>;
+                
+                console.log('🎁 Descuento personal:', this.checked ? 'Activado' : 'Desactivado', 'para orden', ordenId);
+                
+                if (!ordenId) {
+                    console.warn('⚠️ No hay orden activa');
+                    this.checked = false;
+                    return;
+                }
+                
+                // Guardar estado en base de datos
+                fetch('/POS/controllers/actualizar_es_personal.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: new URLSearchParams({
+                        orden_id: ordenId,
+                        es_personal: esPersonal
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'ok') {
+                        // Toast de confirmación
+                        const toast = Swal.mixin({
+                            toast: true,
+                            position: 'top-end',
+                            showConfirmButton: false,
+                            timer: 2000,
+                            timerProgressBar: true
+                        });
+                        
+                        toast.fire({
+                            icon: 'success',
+                            title: esPersonal ? '✅ Descuento personal activado' : '🚫 Descuento personal desactivado',
+                            background: '#1f2937',
+                            color: '#ffffff'
+                        });
+                        
+                        // Recargar orden para aplicar/quitar descuento
+                        cargarOrden();
+                    } else {
+                        throw new Error(data.message || 'Error al actualizar');
+                    }
+                })
+                .catch(error => {
+                    console.error('❌ Error al actualizar descuento personal:', error);
+                    // Revertir el checkbox
+                    this.checked = !this.checked;
+                    
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Error',
+                        text: 'No se pudo actualizar el descuento personal',
+                        background: '#1f2937',
+                        color: '#ffffff'
+                    });
+                });
             });
         }
         
@@ -3216,6 +3313,29 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
             }
         }
     }
+    
+    /** 🔹 Toggle Accordion de Descuentos */
+    function toggleDescuentosAccordion() {
+        const content = document.getElementById('descuentos-content');
+        const icon = document.getElementById('accordion-icon');
+        
+        if (content.style.maxHeight === '0px' || content.style.maxHeight === '') {
+            // Abrir accordion
+            content.style.maxHeight = content.scrollHeight + 'px';
+            icon.style.transform = 'rotate(180deg)';
+            
+            // Guardar estado en localStorage
+            localStorage.setItem('descuentosAccordionAbierto', 'true');
+        } else {
+            // Cerrar accordion
+            content.style.maxHeight = '0px';
+            icon.style.transform = 'rotate(0deg)';
+            
+            // Guardar estado en localStorage
+            localStorage.setItem('descuentosAccordionAbierto', 'false');
+        }
+    }
+
 </script>
 
 <!-- 🎨 Modal de Selección de Variedades -->

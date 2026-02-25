@@ -31,7 +31,7 @@ try {
         JOIN ordenes o ON c.orden_id = o.id
         JOIN mesas m ON o.mesa_id = m.id
         JOIN usuarios u ON c.solicitado_por = u.id
-        JOIN orden_productos op ON c.orden_id = op.orden_id AND c.producto_id = op.producto_id
+        LEFT JOIN orden_productos op ON c.orden_producto_id = op.id
         WHERE c.usado = 0
         AND TIMESTAMPDIFF(SECOND, c.fecha_creacion, NOW()) < 600
         ORDER BY c.fecha_creacion DESC
