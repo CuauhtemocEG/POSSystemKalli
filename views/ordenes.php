@@ -126,6 +126,78 @@ $ordenes = $stmt->fetchAll(PDO::FETCH_ASSOC);
 </div>
 
 <script>
+function mostrarMensajeImpresion(tipo, titulo, mensaje) {
+  if (window.Swal) {
+    Swal.fire({
+      icon: tipo,
+      title: titulo,
+      text: mensaje,
+      confirmButtonColor: '#3B82F6'
+    });
+    return;
+  }
+
+  alert(`${titulo}: ${mensaje}`);
+}
+
+function imprimirTicketOrden(ordenId, codigoOrden) {
+  const formData = new FormData();
+  formData.append('orden_id', ordenId);
+
+  if (window.Swal) {
+    Swal.fire({
+      title: 'Imprimiendo ticket...',
+      text: `Orden #${codigoOrden}`,
+      allowOutsideClick: false,
+      didOpen: () => {
+        Swal.showLoading();
+      }
+    });
+  }
+
+  fetch('controllers/orders/imprimir_ticket.php', {
+      method: 'POST',
+      body: formData
+    })
+    .then(async resp => {
+      const raw = await resp.text();
+      let data;
+
+      try {
+        data = JSON.parse(raw);
+      } catch (e) {
+        throw new Error(raw || `Respuesta inválida del servidor (HTTP ${resp.status})`);
+      }
+
+      if (!resp.ok) {
+        throw new Error(data.message || data.error || `Error HTTP ${resp.status}`);
+      }
+
+      return data;
+    })
+    .then(data => {
+      if (window.Swal) {
+        Swal.close();
+      }
+
+      if (data.success) {
+        mostrarMensajeImpresion('success', 'Ticket enviado', data.message || 'La impresión fue enviada correctamente.');
+      } else {
+        const detalle = data.salida ? `\n\nDetalle: ${data.salida}` : '';
+        mostrarMensajeImpresion('error', 'Error al imprimir', (data.message || data.error || 'No se pudo imprimir el ticket.') + detalle);
+      }
+    })
+    .catch(error => {
+      console.error('Error al imprimir ticket:', error);
+
+      if (window.Swal) {
+        Swal.close();
+      }
+
+      mostrarMensajeImpresion('error', 'Error al imprimir', error.message || 'No se pudo conectar con el servidor de impresión.');
+    });
+}
+
 function cargarOrdenes(page = 1) {
   const form = document.getElementById('filtros-form');
   const data = new FormData(form);
@@ -197,6 +269,22 @@ document.querySelector('input[name="search"]').addEventListener('input', functio
 
 // Load orders on page load
 document.addEventListener('DOMContentLoaded', function() {
+  const tablaOrdenes = document.getElementById('tabla-ordenes');
+
+  tablaOrdenes.addEventListener('click', function(e) {
+    const botonImprimir = e.target.closest('.btn-imprimir-ticket');
+    if (!botonImprimir) return;
+
+    e.preventDefault();
+
+    const ordenId = botonImprimir.getAttribute('data-orden-id');
+    const codigoOrden = botonImprimir.getAttribute('data-orden-codigo') || ordenId;
+
+    if (!ordenId) return;
+
+    imprimirTicketOrden(ordenId, codigoOrden);
+  });
+
   cargarOrdenes(1);
 });
 </script>

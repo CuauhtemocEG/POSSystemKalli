@@ -1086,11 +1086,29 @@ if ($esAdministrador || hasPermission('reportes', 'ver')):
         </div>
       </div>
 
+      <!-- Reporte de Análisis de Promociones -->
+      <div class="bg-dark-600/30 rounded-xl p-6 border border-dark-500/50 mt-6">
+        <div class="flex items-start gap-4">
+          <div class="w-12 h-12 bg-amber-600/20 rounded-xl flex items-center justify-center flex-shrink-0">
+            <i class="bi bi-tags text-amber-400 text-xl"></i>
+          </div>
+          <div class="flex-1">
+            <h3 class="text-lg font-semibold text-white mb-2">Análisis de Promociones</h3>
+            <p class="text-gray-400 text-sm mb-4">Incluye órdenes con promociones, tipos aplicados (2x1, 3x2, descuento personal, descuento manual), productos involucrados e impacto en precios para el período filtrado.</p>
+            <button onclick="generarReporteAnalisisPromociones()"
+              class="w-full px-4 py-3 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-semibold transition-colors flex items-center justify-center gap-2">
+              <i class="bi bi-download"></i>
+              <span>Generar PDF</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
       <div class="mt-6 p-4 bg-amber-500/10 rounded-xl border border-amber-500/30">
         <div class="flex items-center gap-3">
           <i class="bi bi-info-circle text-amber-400 text-lg"></i>
           <div class="text-sm text-amber-200">
-            <strong>Nota:</strong> Los reportes incluyen el logo de Kalli y están diseñados para presentaciones profesionales. Todos los datos corresponden al día actual.
+            <strong>Nota:</strong> Los reportes incluyen el logo de Kalli y están diseñados para presentaciones profesionales. Si aplicas filtros de fecha, se respetan en el PDF generado.
           </div>
         </div>
       </div>
@@ -2333,6 +2351,43 @@ if ($esAdministrador || hasPermission('reportes', 'ver')):
       window.location.href = reportUrl;
       
       // Mostrar mensaje de éxito
+      setTimeout(() => {
+        btn.innerHTML = '<i class="bi bi-check-circle mr-2"></i>Descargado!';
+        btn.classList.add('bg-green-600');
+
+        setTimeout(() => {
+          btn.innerHTML = originalContent;
+          btn.classList.remove('bg-green-600');
+          btn.disabled = false;
+        }, 2000);
+      }, 500);
+    }
+
+      function generarReporteAnalisisPromociones() {
+      const btn = event.target.closest('button');
+      const originalContent = btn.innerHTML;
+      btn.innerHTML = '<i class="bi bi-hourglass-split animate-spin mr-2"></i>Generando...';
+      btn.disabled = true;
+
+      const urlParams = new URLSearchParams(window.location.search);
+      let fechaDesde = urlParams.get('fecha_desde');
+      let fechaHasta = urlParams.get('fecha_hasta');
+
+      if (!fechaDesde || !fechaHasta) {
+        const hoy = new Date().toISOString().split('T')[0];
+        fechaDesde = hoy;
+        fechaHasta = hoy;
+      }
+
+      const params = new URLSearchParams();
+      params.append('fecha_desde', fechaDesde);
+      params.append('fecha_hasta', fechaHasta);
+
+      const reportUrl = 'controllers/reportes/reporte_analisis_promociones.php?' + params.toString();
+      console.log('URL del reporte (Análisis de Promociones):', reportUrl);
+
+      window.location.href = reportUrl;
+
       setTimeout(() => {
         btn.innerHTML = '<i class="bi bi-check-circle mr-2"></i>Descargado!';
         btn.classList.add('bg-green-600');

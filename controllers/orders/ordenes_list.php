@@ -84,11 +84,23 @@ $ordenes = $stmt->fetchAll(PDO::FETCH_ASSOC);
       </td>
       <td class="px-4 py-3"><?= htmlspecialchars($orden['creada_en']) ?></td>
       <td class="px-4 py-3">
-        <button 
-           onclick="window.location.href='index.php?page=detalleOrder&id=<?= $orden['id'] ?>'"
-           class="inline-block bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-xs font-medium text-center transition">
-          Ver Detalle
-        </button>
+        <div class="flex items-center gap-2">
+          <button 
+             onclick="window.location.href='index.php?page=detalleOrder&id=<?= $orden['id'] ?>'"
+             class="inline-block bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-xs font-medium text-center transition">
+            Ver Detalle
+          </button>
+          <?php if (in_array(strtolower(trim($orden['estado'] ?? '')), ['cerrada', 'pagada'], true)): ?>
+            <button
+               type="button"
+               class="btn-imprimir-ticket inline-flex items-center bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-xs font-medium text-center transition"
+               data-orden-id="<?= $orden['id'] ?>"
+               data-orden-codigo="<?= htmlspecialchars($orden['codigo']) ?>">
+              <i class="bi bi-printer mr-1"></i>
+              Imprimir
+            </button>
+          <?php endif; ?>
+        </div>
       </td>
     </tr>
     <?php endforeach; endif; ?>
