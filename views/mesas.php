@@ -13,7 +13,8 @@ $mesas = $pdo->query("
        LEFT JOIN usuarios u ON o.usuario_id = u.id
        WHERE o.mesa_id = m.id AND o.estado = 'abierta' 
        LIMIT 1) as mesero_nombre,
-      (SELECT o.total FROM ordenes o WHERE o.mesa_id = m.id AND o.estado = 'abierta' ORDER BY o.id DESC LIMIT 1) as orden_total
+      (SELECT o.total FROM ordenes o WHERE o.mesa_id = m.id AND o.estado = 'abierta' ORDER BY o.id DESC LIMIT 1) as orden_total,
+      (SELECT o.id FROM ordenes o WHERE o.mesa_id = m.id AND o.estado = 'abierta' ORDER BY o.id DESC LIMIT 1) as orden_id
     FROM mesas m
     ORDER BY m.nombre
 ")->fetchAll(PDO::FETCH_ASSOC);
@@ -40,6 +41,12 @@ try {
     // Si hay error, continuamos sin layout positions
     $layout_positions = [];
 }
+
+// Obtener configuración de impresión térmica
+include_once 'includes/ConfiguracionSistema.php';
+$config = new ConfiguracionSistema($pdo);
+$config_impresion = $config->obtenerTodasConfiguraciones();
+$impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
 
 // Verificar mensajes de la URL
 $success_message = '';
@@ -421,8 +428,7 @@ document.addEventListener('DOMContentLoaded', function() {
   ?>
     <!-- Mesa Card - Kiosk -->
         <div class="kiosk-mesa-card group">
-          <div class="bg-dark-700/40 backdrop-blur-xl rounded-2xl border <?= $borderColor ?> p-6 h-full flex flex-col justify-between shadow-xl <?= $bgColor ?>"
-            onclick="window.location='index.php?page=mesa&id=<?= $mesa['id'] ?>&_=' + Date.now();">
+          <div class="bg-dark-700/40 backdrop-blur-xl rounded-2xl border <?= $borderColor ?> p-6 h-full flex flex-col justify-between shadow-xl <?= $bgColor ?>">
 
         <!-- Mesa Header -->
         <div class="flex items-center justify-between mb-4">
@@ -480,13 +486,21 @@ document.addEventListener('DOMContentLoaded', function() {
           <?php endif; ?>
         </div>
 
-        <!-- Action Button - Touch Optimized -->
-        <div class="mt-auto">
+        <!-- Action Buttons - Touch Optimized -->
+        <div class="mt-auto space-y-2">
           <a href="index.php?page=mesa&id=<?= $mesa['id'] ?>"
             class="kiosk-touch-button block w-full text-center bg-gradient-to-r <?= $btnColor ?> text-white rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl">
             <i class="bi <?= $btnIcon ?> mr-2 text-lg"></i>
             <?= $btnText ?>
           </a>
+          
+          <?php if ($mesa['orden_abierta'] > 0 && isset($mesa['orden_id'])): ?>
+          <button onclick="event.stopPropagation(); event.preventDefault(); imprimirTicketTermico(<?= $mesa['orden_id'] ?>)" 
+            class="kiosk-touch-button block w-full text-center bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl">
+            <i class="bi bi-receipt mr-2 text-lg"></i>
+            Térmica
+          </button>
+          <?php endif; ?>
         </div>
       </div>
     </div>
@@ -1123,7 +1137,7 @@ document.addEventListener('visibilitychange', function() {
 <!-- JavaScript para el Layout Designer -->
 <script>
 // Configuración de rutas
-const BASE_URL = window.location.origin + '/POS/';
+const BASE_URL = window.location.origin + '/KalliPOS/';
 const CONTROLLER_URL = BASE_URL + 'controllers/guardar_layout_temp.php'; // Temporal - funciona sin auth
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -1812,7 +1826,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         // Hacer petición a API con anti-caché
-        fetch('/POS/api/estado_mesas.php?_=' + Date.now())
+        fetch('/KalliPOS/api/estado_mesas.php?_=' + Date.now())
         .then(response => response.json())
         .then(data => {
             if (!data.success) {
@@ -2082,5 +2096,14 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
+<!-- Configuración global de impresora para imprimirTicketTermico() -->
+<script>
+    // Variable global necesaria para la función imprimirTicketTermico() de js/impresion-termica.js
+    window.configImpresoraNombre = '<?= $config_impresion['nombre_impresora'] ?? '' ?>';
+</script>
+
 <!-- === END KIOSK CONTAINER === -->
 </div>
+
+<!-- Script de Impresión Térmica -->
+<script src="js/impresion-termica.js"></script>

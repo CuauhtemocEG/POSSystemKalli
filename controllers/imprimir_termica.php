@@ -1041,6 +1041,166 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ]);
                 }
                 break;
+
+            case 'cierre_rapido':
+                $fechaDesde = $input['fecha_desde'] ?? date('Y-m-d');
+                $fechaHasta = $input['fecha_hasta'] ?? $fechaDesde;
+                $ventaTotal = floatval($input['venta_total'] ?? 0);
+                $ventaTarjeta = floatval($input['venta_tarjeta'] ?? 0);
+                $transferencia = floatval($input['transferencia'] ?? 0);
+                $gastos = is_array($input['gastos'] ?? null) ? $input['gastos'] : [];
+                $totalGastos = floatval($input['total_gastos'] ?? 0);
+                $propina = floatval($input['propina'] ?? 0);
+                $efectivo = floatval($input['efectivo'] ?? ($ventaTotal - $ventaTarjeta - $transferencia - $propina - $totalGastos));
+                $productosPorTipo = is_array($input['productos_por_tipo'] ?? null) ? $input['productos_por_tipo'] : [];
+                $productosCanceladosPorTipo = is_array($input['productos_cancelados_por_tipo'] ?? null) ? $input['productos_cancelados_por_tipo'] : [];
+
+                // Impresora: misma configuración base usada por cerrar_orden.php
+                $nombreImpresora = $input['impresora'] ?? null;
+                if (!$nombreImpresora) {
+                    $stmtConfigImp = $pdo->prepare("SELECT clave, valor FROM configuracion WHERE clave IN ('impresion_automatica', 'nombre_impresora')");
+                    $stmtConfigImp->execute();
+                    $configImp = $stmtConfigImp->fetchAll(PDO::FETCH_KEY_PAIR);
+                    $nombreImpresora = $configImp['nombre_impresora'] ?? '';
+                }
+
+                if (empty($nombreImpresora)) {
+                    throw new Exception('No hay impresora térmica configurada (nombre_impresora)');
+                }
+
+                // Encabezado del ticket
+                $impresora->imagenConfigurada();
+
+                $stmtEmp = $pdo->prepare("SELECT clave, valor FROM configuracion WHERE clave IN ('empresa_nombre', 'empresa_direccion')");
+                $stmtEmp->execute();
+                $configEmp = $stmtEmp->fetchAll(PDO::FETCH_KEY_PAIR);
+
+                $empresaNombre = $configEmp['empresa_nombre'] ?? 'KALLI JAGUAR';
+                $empresaDireccion = $configEmp['empresa_direccion'] ?? '';
+
+                if (!empty($empresaDireccion)) {
+                    $lineasDireccion = $impresora->dividirTextoParaTicket($empresaDireccion, 32);
+                    foreach ($lineasDireccion as $linea) {
+                        $impresora->texto($linea, 'center');
+                    }
+                    $impresora->saltoLinea();
+                }
+
+                $impresora->texto($empresaNombre, 'center', true);
+                $impresora->texto('Corte del día', 'center', true, 'large');
+                $impresora->linea('=', 24);
+                $impresora->texto('Periodo: ' . date('d/m/Y', strtotime($fechaDesde)) . ' al ' . date('d/m/Y', strtotime($fechaHasta)), 'left');
+                $impresora->texto('Impreso: ' . date('d/m/Y H:i:s'), 'left');
+                $impresora->linea('-', 45);
+
+                $impresora->texto('Venta total:      $' . number_format($ventaTotal, 2), 'left');
+                $impresora->texto('Venta tarjeta:    $' . number_format($ventaTarjeta, 2), 'left');
+                $impresora->texto('Propina:          $' . number_format($propina, 2), 'left');
+                $impresora->texto('Total Terminal:   $' . number_format($ventaTarjeta + $propina, 2), 'left');
+                $impresora->texto('Transferencia:    $' . number_format($transferencia, 2), 'left');
+
+                $impresora->linea('-', 45);
+                $impresora->texto('GASTOS', 'left', true);
+
+                if (empty($gastos)) {
+                    $impresora->texto('Sin gastos registrados', 'left');
+                } else {
+                    foreach ($gastos as $gasto) {
+                        $concepto = trim((string)($gasto['concepto'] ?? 'Gasto'));
+                        $monto = floatval($gasto['monto'] ?? 0);
+                        if ($concepto === '') {
+                            $concepto = 'Gasto';
+                        }
+                        $conceptoCorto = substr($concepto, 0, 26);
+                        $montoTxt = '$' . number_format($monto, 2);
+                        $espacios = 45 - strlen($conceptoCorto) - strlen($montoTxt);
+                        $linea = $conceptoCorto . str_repeat('.', max(1, $espacios)) . $montoTxt;
+                        $impresora->texto($linea, 'left');
+                    }
+                }
+
+                $impresora->linea('-', 45);
+                $impresora->texto('Total gastos:     $' . number_format($totalGastos, 2), 'left', true);
+                $impresora->linea('=', 45);
+                $impresora->texto('EFECTIVO: $' . number_format($efectivo, 2), 'right', true, 'large');
+
+                // Productos vendidos por tipo
+                if (!empty($productosPorTipo)) {
+                    $impresora->saltoLinea();
+                    $impresora->linea('=', 45);
+                    $impresora->texto('PRODUCTOS VENDIDOS POR TIPO', 'center', true);
+                    $impresora->linea('=', 45);
+
+                    foreach ($productosPorTipo as $tipoNombre => $productos) {
+                        $tipoStr = strtoupper((string)$tipoNombre);
+                        $totalTipo = array_sum(array_column($productos, 'cantidad'));
+                        $impresora->saltoLinea();
+                        // Encabezado del tipo con total
+                        $totalTipoTxt = '(' . $totalTipo . ' pzas)';
+                        $espaciosTipo = 45 - strlen($tipoStr) - strlen($totalTipoTxt);
+                        $impresora->texto($tipoStr . str_repeat(' ', max(1, $espaciosTipo)) . $totalTipoTxt, 'left', true);
+                        $impresora->linea('-', 45);
+
+                        foreach ($productos as $prod) {
+                            $nombre = trim((string)($prod['nombre'] ?? ''));
+                            $cantidad = (int)($prod['cantidad'] ?? 0);
+                            if ($nombre === '' || $cantidad <= 0) {
+                                continue;
+                            }
+                            $nombreCorto = substr($nombre, 0, 37);
+                            $cantTxt = (string)$cantidad;
+                            $espaciosProd = 45 - strlen($nombreCorto) - strlen($cantTxt);
+                            $impresora->texto($nombreCorto . str_repeat('.', max(1, $espaciosProd)) . $cantTxt, 'left');
+                        }
+                    }
+                    $impresora->linea('=', 45);
+                }
+
+                $impresora->saltoLinea();
+                $impresora->linea('-', 45);
+                $impresora->texto('FIN CIERRE RAPIDO', 'center');
+
+                                // Productos cancelados por tipo
+                                if (!empty($productosCanceladosPorTipo)) {
+                                    $impresora->saltoLinea();
+                                    $impresora->linea('=', 45);
+                                    $impresora->texto('CANCELADOS', 'center', true);
+                                    $impresora->linea('=', 45);
+
+                                    foreach ($productosCanceladosPorTipo as $tipoNombre => $productos) {
+                                        $tipoStr = strtoupper((string)$tipoNombre);
+                                        $totalTipo = array_sum(array_column($productos, 'cantidad'));
+                                        $impresora->saltoLinea();
+                                        $totalTipoTxt = '(' . $totalTipo . ' pzas)';
+                                        $espaciosTipo = 45 - strlen($tipoStr) - strlen($totalTipoTxt);
+                                        $impresora->texto($tipoStr . str_repeat(' ', max(1, $espaciosTipo)) . $totalTipoTxt, 'left', true);
+                                        $impresora->linea('-', 45);
+
+                                        foreach ($productos as $prod) {
+                                            $nombre = trim((string)($prod['nombre'] ?? ''));
+                                            $cantidad = (int)($prod['cantidad'] ?? 0);
+                                            if ($nombre === '' || $cantidad <= 0) {
+                                                continue;
+                                            }
+                                            $nombreCorto = substr($nombre, 0, 37);
+                                            $cantTxt = (string)$cantidad;
+                                            $espaciosProd = 45 - strlen($nombreCorto) - strlen($cantTxt);
+                                            $impresora->texto($nombreCorto . str_repeat('.', max(1, $espaciosProd)) . $cantTxt, 'left');
+                                        }
+                                    }
+                                    $impresora->linea('=', 45);
+                                }
+                $impresora->saltoLinea();
+                $impresora->cortar();
+
+                $resultadoImpresion = $impresora->imprimir($nombreImpresora);
+                echo json_encode([
+                    'success' => $resultadoImpresion['success'],
+                    'message' => $resultadoImpresion['mensaje'],
+                    'sistema' => $resultadoImpresion['sistema'] ?? null,
+                    'salida' => $resultadoImpresion['salida'] ?? null
+                ]);
+                break;
                 
             case 'ticket':
                 // Generar ticket de orden

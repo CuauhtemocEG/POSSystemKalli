@@ -701,6 +701,14 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
     const ordenId = <?= $orden_id ?>;
     const esAdministrador = <?= $esAdministrador ? 'true' : 'false' ?>;
 
+    // Variables para división de cuentas
+    let divisionCuenta = false;
+    let numeroDivisiones = 1;
+    let pagoActual = 1;
+    let totalOrden = 0;
+    let totalPagado = 0;
+    let pagosRealizados = [];
+
     /** 🔹 Función para actualizar descuento por porcentaje */
     function actualizarDescuentoPorcentaje(aplicar, porcentaje) {
         if (!ordenId) {
@@ -2994,19 +3002,197 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
                 total = parseFloat(totalText.replace('$', '').replace(',', '')) || 0;
             }
 
+            // Guardar el total en variable global
+            totalOrden = total;
+
+            // PRIMERO: Preguntar si quiere dividir la cuenta
             Swal.fire({
-                title: '✅ ¿Cerrar y pagar orden?',
+                title: '💳 Forma de pago',
                 html: '<div class="text-center">' +
-                    '<div class="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">' +
+                    '<div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">' +
+                    '<p class="text-lg font-bold text-blue-700 mb-2">Total de la orden: ' + totalText + '</p>' +
+                    '</div>' +
+                    '<p class="text-gray-700 mb-4">¿Cómo desea realizar el pago?</p>' +
+                    '</div>',
+                icon: 'question',
+                showDenyButton: true,
+                showCancelButton: true,
+                confirmButtonText: '<i class="bi bi-credit-card mr-2"></i>Pago único',
+                denyButtonText: '<i class="bi bi-people mr-2"></i>Dividir cuenta',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#10b981',
+                denyButtonColor: '#3b82f6',
+                cancelButtonColor: '#6b7280'
+            }).then(function(result) {
+                if (result.isConfirmed) {
+                    // Pago único - flujo normal
+                    divisionCuenta = false;
+                    mostrarModalMetodosPago(total, totalText, false, 1, 1);
+                } else if (result.isDenied) {
+                    // División de cuenta
+                    preguntarNumeroDivisiones(total, totalText);
+                }
+            });
+        }
+
+        /** 🔹 Preguntar en cuántas partes se divide la cuenta */
+        function preguntarNumeroDivisiones(total, totalText) {
+            Swal.fire({
+                title: '🔢 ¿En cuántas partes?',
+                html: '<div class="text-center">' +
+                    '<div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">' +
+                    '<p class="text-lg font-bold text-blue-700">Total: ' + totalText + '</p>' +
+                    '</div>' +
+                    '<p class="text-gray-700 mb-4">¿En cuántas partes se dividirá la cuenta?</p>' +
+                    '<input type="number" id="numero-divisiones" class="w-full px-4 py-3 border border-gray-300 rounded-lg text-center text-2xl font-bold" ' +
+                    'placeholder="2" min="2" max="20" value="2">' +
+                    '</div>',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Continuar',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#3b82f6',
+                cancelButtonColor: '#6b7280',
+                preConfirm: function() {
+                    const num = parseInt(document.getElementById('numero-divisiones').value);
+                    if (!num || num < 2) {
+                        Swal.showValidationMessage('Debe dividir en al menos 2 partes');
+                        return false;
+                    }
+                    if (num > 20) {
+                        Swal.showValidationMessage('Máximo 20 divisiones');
+                        return false;
+                    }
+                    return num;
+                }
+            }).then(function(result) {
+                if (result.isConfirmed) {
+                    const numDivisiones = result.value;
+                    iniciarDivisionCuenta(total, totalText, numDivisiones);
+                }
+            });
+        }
+
+        /** 🔹 Iniciar división de cuenta en el servidor */
+        function iniciarDivisionCuenta(total, totalText, numDivisiones) {
+            // Mostrar loading
+            Swal.fire({
+                title: 'Iniciando división de cuenta...',
+                allowOutsideClick: false,
+                didOpen: function() {
+                    Swal.showLoading();
+                }
+            });
+
+            // Llamar al servidor para iniciar la división
+            fetch('/POS/controllers/division_cuentas.php?action=iniciar_division', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams({
+                    orden_id: ordenId,
+                    numero_divisiones: numDivisiones
+                })
+            })
+            .then(function(response) {
+                // Verificar si la respuesta es OK
+                if (!response.ok) {
+                    throw new Error('Error HTTP: ' + response.status);
+                }
+                
+                // Obtener el texto primero para debug
+                return response.text().then(function(text) {
+                    console.log('📄 Respuesta del servidor:', text);
+                    
+                    try {
+                        return JSON.parse(text);
+                    } catch (e) {
+                        console.error('❌ Error parseando JSON:', e);
+                        console.error('❌ Texto recibido:', text);
+                        throw new Error('Respuesta inválida del servidor. Ver consola para detalles.');
+                    }
+                });
+            })
+            .then(function(data) {
+                if (data.success) {
+                    // Configurar variables globales
+                    divisionCuenta = true;
+                    numeroDivisiones = numDivisiones;
+                    pagoActual = 1;
+                    totalPagado = 0;
+                    pagosRealizados = [];
+
+                    Swal.close();
+                    
+                    // Mostrar modal de pago para la primera división
+                    mostrarModalMetodosPago(total, totalText, true, 1, numDivisiones);
+                } else {
+                    throw new Error(data.error || 'Error al iniciar división');
+                }
+            })
+            .catch(function(error) {
+                console.error('🚨 Error completo:', error);
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: 'No se pudo iniciar la división de cuenta: ' + error.message,
+                    confirmButtonColor: '#ef4444'
+                });
+            });
+        }
+
+        /** 🔹 Mostrar modal de métodos de pago */
+        function mostrarModalMetodosPago(totalOrdenCompleta, totalText, esDivision, numeroPago, totalDivisiones) {
+            // Calcular cuánto debe pagar esta división
+            let montoPagar = totalOrdenCompleta - totalPagado;
+            let montoMinimo = 0.01;
+            
+            // Si es división y no es la última, permitir ingresar monto personalizado
+            let esUltimoPago = (numeroPago === totalDivisiones);
+            
+            let tituloModal = esDivision 
+                ? `💳 Pago ${numeroPago} de ${totalDivisiones}`
+                : '✅ ¿Cerrar y pagar orden?';
+            
+            let infoRestante = '';
+            if (esDivision) {
+                infoRestante = '<div class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">' +
+                    '<p class="text-sm text-blue-700"><strong>Total orden:</strong> ' + totalText + '</p>' +
+                    '<p class="text-sm text-blue-700"><strong>Ya pagado:</strong> $' + totalPagado.toFixed(2) + '</p>' +
+                    '<p class="text-lg font-bold text-blue-900 mt-2"><strong>Restante:</strong> $' + montoPagar.toFixed(2) + '</p>' +
+                    '</div>';
+            }
+
+            // Campo de monto si no es la última división
+            let campoMonto = '';
+            if (esDivision && !esUltimoPago) {
+                campoMonto = '<div class="mb-4">' +
+                    '<label class="block text-sm font-medium text-gray-700 mb-2">Monto a pagar en esta división:</label>' +
+                    '<input type="number" id="monto-division" class="w-full px-4 py-3 border-2 border-blue-300 rounded-lg text-center text-2xl font-bold text-blue-700" ' +
+                    'placeholder="$0.00" step="0.01" min="' + montoMinimo + '" max="' + montoPagar + '" value="">' +
+                    '<p class="text-xs text-gray-500 mt-1">Ingrese el monto exacto que pagará esta persona</p>' +
+                    '</div>';
+            } else if (esUltimoPago) {
+                // Si es el último pago, mostrar el monto restante (no editable)
+                campoMonto = '<div class="mb-4 bg-green-50 border-2 border-green-300 rounded-lg p-4">' +
+                    '<p class="text-sm text-green-700 mb-1">Último pago (monto exacto restante):</p>' +
+                    '<p class="text-3xl font-bold text-green-700">$' + montoPagar.toFixed(2) + '</p>' +
+                    '<input type="hidden" id="monto-division" value="' + montoPagar + '">' +
+                    '</div>';
+            }
+
+            Swal.fire({
+                title: tituloModal,
+                html: '<div class="text-center">' +
+                    (esDivision ? '' : '<div class="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">' +
                     '<p class="text-green-700 font-semibold mb-2">' +
                     '<i class="bi bi-check-circle mr-2"></i>' +
                     'Todos los productos están preparados' +
                     '</p>' +
-                    '</div>' +
-                    '<p class="mb-4">Esta acción cerrará la orden y marcará la mesa como disponible</p>' +
-                    '<div class="bg-gray-100 p-4 rounded-lg mb-4">' +
-                    '<p class="text-lg font-bold text-green-600">Total a pagar: ' + totalText + '</p>' +
-                    '</div>' +
+                    '</div>') +
+                    infoRestante +
+                    campoMonto +
                     '<div class="mb-4">' +
                     '<label class="block text-sm font-medium text-gray-700 mb-2">Método de pago:</label>' +
                     '<div class="grid grid-cols-2 gap-3 mb-4">' +
@@ -3044,7 +3230,7 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
                     '<div class="mb-3">' +
                     '<label class="block text-sm font-medium text-gray-700 mb-1">Dinero recibido:</label>' +
                     '<input type="number" id="dinero-recibido" class="w-full px-3 py-2 border border-gray-300 rounded-md text-center text-lg font-semibold" ' +
-                    'placeholder="$0.00" step="0.01" min="' + total + '" oninput="calcularCambio(' + total + ')">' +
+                    'placeholder="$0.00" step="0.01" min="0" oninput="calcularCambioDivision(' + montoPagar + ', ' + esDivision + ', ' + esUltimoPago + ')">' +
                     '</div>' +
                     '<div id="cambio-display" class="text-center p-2 bg-green-100 rounded-md" style="display: none;">' +
                     '<p class="text-sm text-gray-600">Cambio a entregar:</p>' +
@@ -3057,7 +3243,7 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
                     '</div>',
                 icon: 'question',
                 showCancelButton: true,
-                confirmButtonText: 'Sí, cerrar orden',
+                confirmButtonText: esDivision ? (esUltimoPago ? 'Finalizar pago' : 'Registrar pago') : 'Sí, cerrar orden',
                 cancelButtonText: 'Cancelar',
                 confirmButtonColor: '#10b981',
                 cancelButtonColor: '#6b7280'
@@ -3065,73 +3251,277 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
                 if (result.isConfirmed) {
                     // Obtener el método de pago seleccionado
                     const metodoPago = document.querySelector('input[name="metodo_pago"]:checked').value;
-
-                    // Validar efectivo si es necesario
-                    if (metodoPago === 'efectivo') {
-                        const dineroRecibido = parseFloat(document.getElementById('dinero-recibido').value) || 0;
+                    
+                    // Obtener monto a pagar
+                    let montoAPagar = montoPagar;
+                    if (esDivision && !esUltimoPago) {
+                        const montoInput = document.getElementById('monto-division');
+                        montoAPagar = parseFloat(montoInput.value) || 0;
                         
-                        if (dineroRecibido < total) {
+                        if (montoAPagar <= 0) {
                             Swal.fire({
                                 icon: 'error',
-                                title: 'Dinero insuficiente',
-                                text: 'El dinero recibido debe ser mayor o igual al total de la cuenta',
+                                title: 'Monto inválido',
+                                text: 'Debe ingresar un monto válido mayor a 0',
+                                confirmButtonColor: '#ef4444'
+                            });
+                            return;
+                        }
+                        
+                        if (montoAPagar > montoPagar) {
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Monto excesivo',
+                                text: 'El monto no puede ser mayor al restante ($' + montoPagar.toFixed(2) + ')',
                                 confirmButtonColor: '#ef4444'
                             });
                             return;
                         }
                     }
 
-                    // Agregar el método de pago al formulario
-                    const form = document.getElementById('cerrar-orden-form');
-                    const metodoPagoInput = document.createElement('input');
-                    metodoPagoInput.type = 'hidden';
-                    metodoPagoInput.name = 'metodo_pago';
-                    metodoPagoInput.value = metodoPago;
-                    form.appendChild(metodoPagoInput);
-
-                    // Si es efectivo, agregar información del dinero recibido y cambio
+                    // Validar efectivo si es necesario
+                    let dineroRecibido = null;
+                    let cambio = null;
+                    
                     if (metodoPago === 'efectivo') {
-                        const dineroRecibido = parseFloat(document.getElementById('dinero-recibido').value);
-                        const cambio = dineroRecibido - total;
-
-                        const dineroRecibidoInput = document.createElement('input');
-                        dineroRecibidoInput.type = 'hidden';
-                        dineroRecibidoInput.name = 'dinero_recibido';
-                        dineroRecibidoInput.value = dineroRecibido.toFixed(2);
-                        form.appendChild(dineroRecibidoInput);
-
-                        const cambioInput = document.createElement('input');
-                        cambioInput.type = 'hidden';
-                        cambioInput.name = 'cambio';
-                        cambioInput.value = cambio.toFixed(2);
-                        form.appendChild(cambioInput);
+                        dineroRecibido = parseFloat(document.getElementById('dinero-recibido').value) || 0;
+                        
+                        if (dineroRecibido < montoAPagar) {
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Dinero insuficiente',
+                                text: 'El dinero recibido debe ser mayor o igual al monto a pagar',
+                                confirmButtonColor: '#ef4444'
+                            });
+                            return;
+                        }
+                        
+                        cambio = dineroRecibido - montoAPagar;
                     }
 
-                    let loadingText = 'Procesando pago por ' + metodoPago;
-                    if (metodoPago === 'efectivo') {
-                        const dineroRecibido = parseFloat(document.getElementById('dinero-recibido').value);
-                        const cambio = dineroRecibido - total;
-                        if (cambio > 0) {
-                            loadingText += '. Cambio: $' + cambio.toFixed(2);
-                        } else {
-                            loadingText += ' (pago exacto)';
-                        }
+                    // Si es división, registrar pago parcial
+                    if (esDivision) {
+                        registrarPagoParcial(numeroPago, montoAPagar, metodoPago, dineroRecibido, cambio, totalOrdenCompleta, totalText, totalDivisiones);
+                    } else {
+                        // Pago único - usar flujo normal
+                        procesarPagoUnico(metodoPago, dineroRecibido, cambio, totalOrdenCompleta);
                     }
-
-                    // Mostrar loading
-                    Swal.fire({
-                        title: 'Cerrando orden...',
-                        text: loadingText + ' y liberando mesa',
-                        allowOutsideClick: false,
-                        didOpen: function() {
-                            Swal.showLoading();
-                        }
-                    });
-
-                    // Enviar el formulario
-                    form.submit();
                 }
             });
+        }
+
+        /** 🔹 Registrar pago parcial */
+        function registrarPagoParcial(numeroPago, monto, metodoPago, dineroRecibido, cambio, totalOrdenCompleta, totalText, totalDivisiones) {
+            // Mostrar loading
+            Swal.fire({
+                title: 'Registrando pago...',
+                text: 'Pago ' + numeroPago + ' de ' + totalDivisiones,
+                allowOutsideClick: false,
+                didOpen: function() {
+                    Swal.showLoading();
+                }
+            });
+
+            // Registrar pago en el servidor
+            fetch('/POS/controllers/division_cuentas.php?action=registrar_pago', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams({
+                    orden_id: ordenId,
+                    numero_pago: numeroPago,
+                    monto: monto.toFixed(2),
+                    metodo_pago: metodoPago,
+                    dinero_recibido: dineroRecibido !== null ? dineroRecibido.toFixed(2) : '',
+                    cambio: cambio !== null ? cambio.toFixed(2) : ''
+                })
+            })
+            .then(function(response) {
+                // Verificar si la respuesta es OK
+                if (!response.ok) {
+                    throw new Error('Error HTTP: ' + response.status);
+                }
+                
+                // Obtener el texto primero para debug
+                return response.text().then(function(text) {
+                    console.log('📄 Respuesta registro pago:', text);
+                    
+                    try {
+                        return JSON.parse(text);
+                    } catch (e) {
+                        console.error('❌ Error parseando JSON:', e);
+                        console.error('❌ Texto recibido:', text);
+                        throw new Error('Respuesta inválida del servidor. Ver consola para detalles.');
+                    }
+                });
+            })
+            .then(function(data) {
+                if (data.success) {
+                    // Actualizar variables globales
+                    totalPagado += monto;
+                    pagosRealizados.push({
+                        numero: numeroPago,
+                        monto: monto,
+                        metodo: metodoPago
+                    });
+
+                    // Verificar si es el último pago
+                    if (data.completada) {
+                        // Todos los pagos completados - cerrar orden
+                        Swal.fire({
+                            icon: 'success',
+                            title: '✅ Pagos completados',
+                            text: 'Todos los pagos han sido registrados. Cerrando orden...',
+                            showConfirmButton: false,
+                            timer: 2000
+                        }).then(function() {
+                            cerrarOrdenConDivision();
+                        });
+                    } else {
+                        // Mostrar resumen y continuar con siguiente pago
+                        mostrarResumenYContinuar(totalOrdenCompleta, totalText, totalDivisiones);
+                    }
+                } else {
+                    throw new Error(data.error || 'Error al registrar pago');
+                }
+            })
+            .catch(function(error) {
+                console.error('Error:', error);
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: 'No se pudo registrar el pago: ' + error.message,
+                    confirmButtonColor: '#ef4444'
+                });
+            });
+        }
+
+        /** 🔹 Mostrar resumen y continuar con siguiente pago */
+        function mostrarResumenYContinuar(totalOrdenCompleta, totalText, totalDivisiones) {
+            let resumenHTML = '<div class="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">' +
+                '<p class="text-green-700 font-semibold mb-3"><i class="bi bi-check-circle mr-2"></i>Pago registrado exitosamente</p>' +
+                '<div class="text-left space-y-2">';
+            
+            // Mostrar pagos realizados
+            pagosRealizados.forEach(function(pago) {
+                const metodoIcon = {
+                    'efectivo': '💵',
+                    'debito': '💳',
+                    'credito': '💳',
+                    'transferencia': '🏦'
+                };
+                resumenHTML += '<p class="text-sm text-gray-700">' +
+                    metodoIcon[pago.metodo] + ' Pago ' + pago.numero + ': $' + pago.monto.toFixed(2) + 
+                    ' (' + pago.metodo.charAt(0).toUpperCase() + pago.metodo.slice(1) + ')' +
+                    '</p>';
+            });
+            
+            resumenHTML += '</div></div>' +
+                '<div class="bg-blue-50 border border-blue-200 rounded-lg p-4">' +
+                '<p class="text-blue-700"><strong>Total orden:</strong> ' + totalText + '</p>' +
+                '<p class="text-blue-700"><strong>Ya pagado:</strong> $' + totalPagado.toFixed(2) + '</p>' +
+                '<p class="text-lg font-bold text-blue-900 mt-2"><strong>Restante:</strong> $' + (totalOrdenCompleta - totalPagado).toFixed(2) + '</p>' +
+                '</div>';
+
+            Swal.fire({
+                title: '💰 Resumen de pagos',
+                html: resumenHTML,
+                icon: 'info',
+                confirmButtonText: 'Continuar con siguiente pago',
+                confirmButtonColor: '#3b82f6'
+            }).then(function() {
+                // Incrementar número de pago y mostrar siguiente modal
+                pagoActual++;
+                mostrarModalMetodosPago(totalOrdenCompleta, totalText, true, pagoActual, totalDivisiones);
+            });
+        }
+
+        /** 🔹 Cerrar orden después de completar todos los pagos parciales */
+        function cerrarOrdenConDivision() {
+            // Enviar formulario para cerrar orden con división
+            const form = document.getElementById('cerrar-orden-form');
+            
+            // Agregar flag de división
+            const divisionInput = document.createElement('input');
+            divisionInput.type = 'hidden';
+            divisionInput.name = 'es_division';
+            divisionInput.value = '1';
+            form.appendChild(divisionInput);
+            
+            // Enviar formulario
+            form.submit();
+        }
+
+        /** 🔹 Procesar pago único (flujo normal sin división) */
+        function procesarPagoUnico(metodoPago, dineroRecibido, cambio, total) {
+            // Agregar el método de pago al formulario
+            const form = document.getElementById('cerrar-orden-form');
+            const metodoPagoInput = document.createElement('input');
+            metodoPagoInput.type = 'hidden';
+            metodoPagoInput.name = 'metodo_pago';
+            metodoPagoInput.value = metodoPago;
+            form.appendChild(metodoPagoInput);
+
+            // Si es efectivo, agregar información del dinero recibido y cambio
+            if (metodoPago === 'efectivo' && dineroRecibido !== null) {
+                const dineroRecibidoInput = document.createElement('input');
+                dineroRecibidoInput.type = 'hidden';
+                dineroRecibidoInput.name = 'dinero_recibido';
+                dineroRecibidoInput.value = dineroRecibido.toFixed(2);
+                form.appendChild(dineroRecibidoInput);
+
+                const cambioInput = document.createElement('input');
+                cambioInput.type = 'hidden';
+                cambioInput.name = 'cambio';
+                cambioInput.value = cambio.toFixed(2);
+                form.appendChild(cambioInput);
+            }
+
+            let loadingText = 'Procesando pago por ' + metodoPago;
+            if (metodoPago === 'efectivo' && cambio !== null) {
+                if (cambio > 0) {
+                    loadingText += '. Cambio: $' + cambio.toFixed(2);
+                } else {
+                    loadingText += ' (pago exacto)';
+                }
+            }
+
+            // Mostrar loading
+            Swal.fire({
+                title: 'Cerrando orden...',
+                text: loadingText + ' y liberando mesa',
+                allowOutsideClick: false,
+                didOpen: function() {
+                    Swal.showLoading();
+                }
+            });
+
+            // Enviar el formulario
+            form.submit();
+        }
+
+        /** 🔹 Calcular cambio para división de cuenta */
+        function calcularCambioDivision(montoPagar, esDivision, esUltimoPago) {
+            // Si es división y no es último pago, primero validar que se ingresó el monto
+            if (esDivision && !esUltimoPago) {
+                const montoInput = document.getElementById('monto-division');
+                const montoIngresado = parseFloat(montoInput.value) || 0;
+                
+                if (montoIngresado <= 0) {
+                    // No calcular cambio si no hay monto definido
+                    const cambioDisplay = document.getElementById('cambio-display');
+                    const cambioError = document.getElementById('cambio-error');
+                    cambioDisplay.style.display = 'none';
+                    cambioError.style.display = 'none';
+                    return;
+                }
+                
+                montoPagar = montoIngresado;
+            }
+            
+            // Usar la función existente de calcularCambio pero con el monto específico
+            calcularCambio(montoPagar);
         }
     });
 

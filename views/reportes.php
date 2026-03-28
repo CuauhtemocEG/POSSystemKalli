@@ -3,8 +3,9 @@
 // $pdo y $userInfo ya están disponibles desde index.php
 
 // Manejar filtros de fecha
-$fechaDesde = $_GET['fecha_desde'] ?? null;
-$fechaHasta = $_GET['fecha_hasta'] ?? null;
+$fechaHoySistema = date('Y-m-d');
+$fechaDesde = $_GET['fecha_desde'] ?? $fechaHoySistema;
+$fechaHasta = $_GET['fecha_hasta'] ?? $fechaHoySistema;
 
 // Construir condiciones de fecha
 $condicionFecha = "";
@@ -20,7 +21,11 @@ if ($fechaDesde && $fechaHasta) {
   $condicionFechaHoy = $condicionFecha;
   $condicionFechaSemana = $condicionFecha;
   $condicionFechaMes = $condicionFecha;
-  $textoPeriodo = "del " . date('d/m/Y', strtotime($fechaDesde)) . " al " . date('d/m/Y', strtotime($fechaHasta));
+  if ($fechaDesde === $fechaHoySistema && $fechaHasta === $fechaHoySistema) {
+    $textoPeriodo = "Hoy";
+  } else {
+    $textoPeriodo = "del " . date('d/m/Y', strtotime($fechaDesde)) . " al " . date('d/m/Y', strtotime($fechaHasta));
+  }
 }
 
 // Estadísticas básicas con filtros aplicados
@@ -43,61 +48,223 @@ $descuentosHoy = $subtotalHoy - $ventasHoy;
 $descuentosSemana = $subtotalSemana - $ventasSemana;
 $descuentosMes = $subtotalMes - $ventasMes;
 
-// Totales por método de pago - Respetan filtro de fecha personalizado
-$ventasEfectivo = $pdo->query("SELECT COALESCE(SUM(total), 0) FROM ordenes WHERE estado = 'cerrada' AND metodo_pago = 'efectivo'" . ($condicionFecha ? " AND $condicionFecha" : ""))->fetchColumn() ?? 0;
-$ventasDebito = $pdo->query("SELECT COALESCE(SUM(total), 0) FROM ordenes WHERE estado = 'cerrada' AND metodo_pago = 'debito'" . ($condicionFecha ? " AND $condicionFecha" : ""))->fetchColumn() ?? 0;
-$ventasCredito = $pdo->query("SELECT COALESCE(SUM(total), 0) FROM ordenes WHERE estado = 'cerrada' AND metodo_pago = 'credito'" . ($condicionFecha ? " AND $condicionFecha" : ""))->fetchColumn() ?? 0;
-$ventasTransferencia = $pdo->query("SELECT COALESCE(SUM(total), 0) FROM ordenes WHERE estado = 'cerrada' AND metodo_pago = 'transferencia'" . ($condicionFecha ? " AND $condicionFecha" : ""))->fetchColumn() ?? 0;
-$ventasTarjeta = $pdo->query("SELECT COALESCE(SUM(total), 0) FROM ordenes WHERE estado = 'cerrada' AND metodo_pago = 'tarjeta'" . ($condicionFecha ? " AND $condicionFecha" : ""))->fetchColumn() ?? 0; // Para compatibilidad
+// Condiciones de fecha con alias para consultas con JOIN
+$condicionFechaHoyPagos = str_replace("creada_en", "o.creada_en", $condicionFechaHoy);
+$condicionFechaSemanaPagos = str_replace("creada_en", "o.creada_en", $condicionFechaSemana);
+$condicionFechaMesPagos = str_replace("creada_en", "o.creada_en", $condicionFechaMes);
 
-// Totales por método de pago - HOY
-$ventasEfectivoHoy = $pdo->query("SELECT COALESCE(SUM(total), 0) FROM ordenes WHERE $condicionFechaHoy AND estado = 'cerrada' AND metodo_pago = 'efectivo'")->fetchColumn() ?? 0;
-$ventasDebitoHoy = $pdo->query("SELECT COALESCE(SUM(total), 0) FROM ordenes WHERE $condicionFechaHoy AND estado = 'cerrada' AND metodo_pago = 'debito'")->fetchColumn() ?? 0;
-$ventasCreditoHoy = $pdo->query("SELECT COALESCE(SUM(total), 0) FROM ordenes WHERE $condicionFechaHoy AND estado = 'cerrada' AND metodo_pago = 'credito'")->fetchColumn() ?? 0;
-$ventasTransferenciaHoy = $pdo->query("SELECT COALESCE(SUM(total), 0) FROM ordenes WHERE $condicionFechaHoy AND estado = 'cerrada' AND metodo_pago = 'transferencia'")->fetchColumn() ?? 0;
-$ventasTarjetaHoy = $pdo->query("SELECT COALESCE(SUM(total), 0) FROM ordenes WHERE $condicionFechaHoy AND estado = 'cerrada' AND metodo_pago = 'tarjeta'")->fetchColumn() ?? 0;
+// Totales por método de pago - Respetan filtro de fecha personalizado (incluye pagos parciales)
+$ventasEfectivo = $pdo->query("SELECT COALESCE(SUM(monto), 0) FROM (
+  SELECT o.total as monto
+  FROM ordenes o
+  WHERE o.estado = 'cerrada'
+    AND o.metodo_pago = 'efectivo'" . ($condicionFecha ? " AND DATE(o.creada_en) BETWEEN DATE('$fechaDesde') AND DATE('$fechaHasta')" : "") . "
+    AND NOT EXISTS (SELECT 1 FROM pagos_parciales ppx WHERE ppx.orden_id = o.id)
+  UNION ALL
+  SELECT pp.monto
+  FROM pagos_parciales pp
+  JOIN ordenes o ON pp.orden_id = o.id
+  WHERE o.estado = 'cerrada'
+    AND pp.metodo_pago = 'efectivo'" . ($condicionFecha ? " AND DATE(o.creada_en) BETWEEN DATE('$fechaDesde') AND DATE('$fechaHasta')" : "") . "
+) AS combined")->fetchColumn() ?? 0;
 
-// Totales por método de pago - SEMANA
-$ventasEfectivoSemana = $pdo->query("SELECT COALESCE(SUM(total), 0) FROM ordenes WHERE $condicionFechaSemana AND estado = 'cerrada' AND metodo_pago = 'efectivo'")->fetchColumn() ?? 0;
-$ventasDebitoSemana = $pdo->query("SELECT COALESCE(SUM(total), 0) FROM ordenes WHERE $condicionFechaSemana AND estado = 'cerrada' AND metodo_pago = 'debito'")->fetchColumn() ?? 0;
-$ventasCreditoSemana = $pdo->query("SELECT COALESCE(SUM(total), 0) FROM ordenes WHERE $condicionFechaSemana AND estado = 'cerrada' AND metodo_pago = 'credito'")->fetchColumn() ?? 0;
-$ventasTransferenciaSemana = $pdo->query("SELECT COALESCE(SUM(total), 0) FROM ordenes WHERE $condicionFechaSemana AND estado = 'cerrada' AND metodo_pago = 'transferencia'")->fetchColumn() ?? 0;
-$ventasTarjetaSemana = $pdo->query("SELECT COALESCE(SUM(total), 0) FROM ordenes WHERE $condicionFechaSemana AND estado = 'cerrada' AND metodo_pago = 'tarjeta'")->fetchColumn() ?? 0;
+$ventasDebito = $pdo->query("SELECT COALESCE(SUM(monto), 0) FROM (
+  SELECT o.total as monto
+  FROM ordenes o
+  WHERE o.estado = 'cerrada'
+    AND o.metodo_pago = 'debito'" . ($condicionFecha ? " AND DATE(o.creada_en) BETWEEN DATE('$fechaDesde') AND DATE('$fechaHasta')" : "") . "
+    AND NOT EXISTS (SELECT 1 FROM pagos_parciales ppx WHERE ppx.orden_id = o.id)
+  UNION ALL
+  SELECT pp.monto
+  FROM pagos_parciales pp
+  JOIN ordenes o ON pp.orden_id = o.id
+  WHERE o.estado = 'cerrada'
+    AND pp.metodo_pago = 'debito'" . ($condicionFecha ? " AND DATE(o.creada_en) BETWEEN DATE('$fechaDesde') AND DATE('$fechaHasta')" : "") . "
+) AS combined")->fetchColumn() ?? 0;
 
-// Totales por método de pago - MES
-$ventasEfectivoMes = $pdo->query("SELECT COALESCE(SUM(total), 0) FROM ordenes WHERE $condicionFechaMes AND estado = 'cerrada' AND metodo_pago = 'efectivo'")->fetchColumn() ?? 0;
-$ventasDebitoMes = $pdo->query("SELECT COALESCE(SUM(total), 0) FROM ordenes WHERE $condicionFechaMes AND estado = 'cerrada' AND metodo_pago = 'debito'")->fetchColumn() ?? 0;
-$ventasCreditoMes = $pdo->query("SELECT COALESCE(SUM(total), 0) FROM ordenes WHERE $condicionFechaMes AND estado = 'cerrada' AND metodo_pago = 'credito'")->fetchColumn() ?? 0;
-$ventasTransferenciaMes = $pdo->query("SELECT COALESCE(SUM(total), 0) FROM ordenes WHERE $condicionFechaMes AND estado = 'cerrada' AND metodo_pago = 'transferencia'")->fetchColumn() ?? 0;
-$ventasTarjetaMes = $pdo->query("SELECT COALESCE(SUM(total), 0) FROM ordenes WHERE $condicionFechaMes AND estado = 'cerrada' AND metodo_pago = 'tarjeta'")->fetchColumn() ?? 0;
+$ventasCredito = $pdo->query("SELECT COALESCE(SUM(monto), 0) FROM (
+  SELECT o.total as monto
+  FROM ordenes o
+  WHERE o.estado = 'cerrada'
+    AND o.metodo_pago = 'credito'" . ($condicionFecha ? " AND DATE(o.creada_en) BETWEEN DATE('$fechaDesde') AND DATE('$fechaHasta')" : "") . "
+    AND NOT EXISTS (SELECT 1 FROM pagos_parciales ppx WHERE ppx.orden_id = o.id)
+  UNION ALL
+  SELECT pp.monto
+  FROM pagos_parciales pp
+  JOIN ordenes o ON pp.orden_id = o.id
+  WHERE o.estado = 'cerrada'
+    AND pp.metodo_pago = 'credito'" . ($condicionFecha ? " AND DATE(o.creada_en) BETWEEN DATE('$fechaDesde') AND DATE('$fechaHasta')" : "") . "
+) AS combined")->fetchColumn() ?? 0;
 
-// Estadísticas detalladas por método de pago
+$ventasTransferencia = $pdo->query("SELECT COALESCE(SUM(monto), 0) FROM (
+  SELECT o.total as monto
+  FROM ordenes o
+  WHERE o.estado = 'cerrada'
+    AND o.metodo_pago = 'transferencia'" . ($condicionFecha ? " AND DATE(o.creada_en) BETWEEN DATE('$fechaDesde') AND DATE('$fechaHasta')" : "") . "
+    AND NOT EXISTS (SELECT 1 FROM pagos_parciales ppx WHERE ppx.orden_id = o.id)
+  UNION ALL
+  SELECT pp.monto
+  FROM pagos_parciales pp
+  JOIN ordenes o ON pp.orden_id = o.id
+  WHERE o.estado = 'cerrada'
+    AND pp.metodo_pago = 'transferencia'" . ($condicionFecha ? " AND DATE(o.creada_en) BETWEEN DATE('$fechaDesde') AND DATE('$fechaHasta')" : "") . "
+) AS combined")->fetchColumn() ?? 0;
+
+$ventasTarjeta = $pdo->query("SELECT COALESCE(SUM(monto), 0) FROM (
+  SELECT o.total as monto
+  FROM ordenes o
+  WHERE o.estado = 'cerrada'
+    AND o.metodo_pago = 'tarjeta'" . ($condicionFecha ? " AND DATE(o.creada_en) BETWEEN DATE('$fechaDesde') AND DATE('$fechaHasta')" : "") . "
+    AND NOT EXISTS (SELECT 1 FROM pagos_parciales ppx WHERE ppx.orden_id = o.id)
+  UNION ALL
+  SELECT pp.monto
+  FROM pagos_parciales pp
+  JOIN ordenes o ON pp.orden_id = o.id
+  WHERE o.estado = 'cerrada'
+    AND pp.metodo_pago = 'tarjeta'" . ($condicionFecha ? " AND DATE(o.creada_en) BETWEEN DATE('$fechaDesde') AND DATE('$fechaHasta')" : "") . "
+) AS combined")->fetchColumn() ?? 0; // Para compatibilidad
+
+// Totales por método de pago - HOY (incluye pagos parciales)
+$ventasEfectivoHoy = $pdo->query("SELECT COALESCE(SUM(monto), 0) FROM (
+  SELECT o.total as monto FROM ordenes o WHERE $condicionFechaHoy AND o.estado = 'cerrada' AND o.metodo_pago = 'efectivo' AND NOT EXISTS (SELECT 1 FROM pagos_parciales ppx WHERE ppx.orden_id = o.id)
+  UNION ALL
+  SELECT pp.monto FROM pagos_parciales pp JOIN ordenes o ON pp.orden_id = o.id WHERE $condicionFechaHoyPagos AND o.estado = 'cerrada' AND pp.metodo_pago = 'efectivo'
+) AS combined")->fetchColumn() ?? 0;
+
+$ventasDebitoHoy = $pdo->query("SELECT COALESCE(SUM(monto), 0) FROM (
+  SELECT o.total as monto FROM ordenes o WHERE $condicionFechaHoy AND o.estado = 'cerrada' AND o.metodo_pago = 'debito' AND NOT EXISTS (SELECT 1 FROM pagos_parciales ppx WHERE ppx.orden_id = o.id)
+  UNION ALL
+  SELECT pp.monto FROM pagos_parciales pp JOIN ordenes o ON pp.orden_id = o.id WHERE $condicionFechaHoyPagos AND o.estado = 'cerrada' AND pp.metodo_pago = 'debito'
+) AS combined")->fetchColumn() ?? 0;
+
+$ventasCreditoHoy = $pdo->query("SELECT COALESCE(SUM(monto), 0) FROM (
+  SELECT o.total as monto FROM ordenes o WHERE $condicionFechaHoy AND o.estado = 'cerrada' AND o.metodo_pago = 'credito' AND NOT EXISTS (SELECT 1 FROM pagos_parciales ppx WHERE ppx.orden_id = o.id)
+  UNION ALL
+  SELECT pp.monto FROM pagos_parciales pp JOIN ordenes o ON pp.orden_id = o.id WHERE $condicionFechaHoyPagos AND o.estado = 'cerrada' AND pp.metodo_pago = 'credito'
+) AS combined")->fetchColumn() ?? 0;
+
+$ventasTransferenciaHoy = $pdo->query("SELECT COALESCE(SUM(monto), 0) FROM (
+  SELECT o.total as monto FROM ordenes o WHERE $condicionFechaHoy AND o.estado = 'cerrada' AND o.metodo_pago = 'transferencia' AND NOT EXISTS (SELECT 1 FROM pagos_parciales ppx WHERE ppx.orden_id = o.id)
+  UNION ALL
+  SELECT pp.monto FROM pagos_parciales pp JOIN ordenes o ON pp.orden_id = o.id WHERE $condicionFechaHoyPagos AND o.estado = 'cerrada' AND pp.metodo_pago = 'transferencia'
+) AS combined")->fetchColumn() ?? 0;
+
+$ventasTarjetaHoy = $pdo->query("SELECT COALESCE(SUM(monto), 0) FROM (
+  SELECT o.total as monto FROM ordenes o WHERE $condicionFechaHoy AND o.estado = 'cerrada' AND o.metodo_pago = 'tarjeta' AND NOT EXISTS (SELECT 1 FROM pagos_parciales ppx WHERE ppx.orden_id = o.id)
+  UNION ALL
+  SELECT pp.monto FROM pagos_parciales pp JOIN ordenes o ON pp.orden_id = o.id WHERE $condicionFechaHoyPagos AND o.estado = 'cerrada' AND pp.metodo_pago = 'tarjeta'
+) AS combined")->fetchColumn() ?? 0;
+
+// Totales por método de pago - SEMANA (incluye pagos parciales)
+$ventasEfectivoSemana = $pdo->query("SELECT COALESCE(SUM(monto), 0) FROM (
+  SELECT o.total as monto FROM ordenes o WHERE $condicionFechaSemana AND o.estado = 'cerrada' AND o.metodo_pago = 'efectivo' AND NOT EXISTS (SELECT 1 FROM pagos_parciales ppx WHERE ppx.orden_id = o.id)
+  UNION ALL
+  SELECT pp.monto FROM pagos_parciales pp JOIN ordenes o ON pp.orden_id = o.id WHERE $condicionFechaSemanaPagos AND o.estado = 'cerrada' AND pp.metodo_pago = 'efectivo'
+) AS combined")->fetchColumn() ?? 0;
+
+$ventasDebitoSemana = $pdo->query("SELECT COALESCE(SUM(monto), 0) FROM (
+  SELECT o.total as monto FROM ordenes o WHERE $condicionFechaSemana AND o.estado = 'cerrada' AND o.metodo_pago = 'debito' AND NOT EXISTS (SELECT 1 FROM pagos_parciales ppx WHERE ppx.orden_id = o.id)
+  UNION ALL
+  SELECT pp.monto FROM pagos_parciales pp JOIN ordenes o ON pp.orden_id = o.id WHERE $condicionFechaSemanaPagos AND o.estado = 'cerrada' AND pp.metodo_pago = 'debito'
+) AS combined")->fetchColumn() ?? 0;
+
+$ventasCreditoSemana = $pdo->query("SELECT COALESCE(SUM(monto), 0) FROM (
+  SELECT o.total as monto FROM ordenes o WHERE $condicionFechaSemana AND o.estado = 'cerrada' AND o.metodo_pago = 'credito' AND NOT EXISTS (SELECT 1 FROM pagos_parciales ppx WHERE ppx.orden_id = o.id)
+  UNION ALL
+  SELECT pp.monto FROM pagos_parciales pp JOIN ordenes o ON pp.orden_id = o.id WHERE $condicionFechaSemanaPagos AND o.estado = 'cerrada' AND pp.metodo_pago = 'credito'
+) AS combined")->fetchColumn() ?? 0;
+
+$ventasTransferenciaSemana = $pdo->query("SELECT COALESCE(SUM(monto), 0) FROM (
+  SELECT o.total as monto FROM ordenes o WHERE $condicionFechaSemana AND o.estado = 'cerrada' AND o.metodo_pago = 'transferencia' AND NOT EXISTS (SELECT 1 FROM pagos_parciales ppx WHERE ppx.orden_id = o.id)
+  UNION ALL
+  SELECT pp.monto FROM pagos_parciales pp JOIN ordenes o ON pp.orden_id = o.id WHERE $condicionFechaSemanaPagos AND o.estado = 'cerrada' AND pp.metodo_pago = 'transferencia'
+) AS combined")->fetchColumn() ?? 0;
+
+$ventasTarjetaSemana = $pdo->query("SELECT COALESCE(SUM(monto), 0) FROM (
+  SELECT o.total as monto FROM ordenes o WHERE $condicionFechaSemana AND o.estado = 'cerrada' AND o.metodo_pago = 'tarjeta' AND NOT EXISTS (SELECT 1 FROM pagos_parciales ppx WHERE ppx.orden_id = o.id)
+  UNION ALL
+  SELECT pp.monto FROM pagos_parciales pp JOIN ordenes o ON pp.orden_id = o.id WHERE $condicionFechaSemanaPagos AND o.estado = 'cerrada' AND pp.metodo_pago = 'tarjeta'
+) AS combined")->fetchColumn() ?? 0;
+
+// Totales por método de pago - MES (incluye pagos parciales)
+$ventasEfectivoMes = $pdo->query("SELECT COALESCE(SUM(monto), 0) FROM (
+  SELECT o.total as monto FROM ordenes o WHERE $condicionFechaMes AND o.estado = 'cerrada' AND o.metodo_pago = 'efectivo' AND NOT EXISTS (SELECT 1 FROM pagos_parciales ppx WHERE ppx.orden_id = o.id)
+  UNION ALL
+  SELECT pp.monto FROM pagos_parciales pp JOIN ordenes o ON pp.orden_id = o.id WHERE $condicionFechaMesPagos AND o.estado = 'cerrada' AND pp.metodo_pago = 'efectivo'
+) AS combined")->fetchColumn() ?? 0;
+
+$ventasDebitoMes = $pdo->query("SELECT COALESCE(SUM(monto), 0) FROM (
+  SELECT o.total as monto FROM ordenes o WHERE $condicionFechaMes AND o.estado = 'cerrada' AND o.metodo_pago = 'debito' AND NOT EXISTS (SELECT 1 FROM pagos_parciales ppx WHERE ppx.orden_id = o.id)
+  UNION ALL
+  SELECT pp.monto FROM pagos_parciales pp JOIN ordenes o ON pp.orden_id = o.id WHERE $condicionFechaMesPagos AND o.estado = 'cerrada' AND pp.metodo_pago = 'debito'
+) AS combined")->fetchColumn() ?? 0;
+
+$ventasCreditoMes = $pdo->query("SELECT COALESCE(SUM(monto), 0) FROM (
+  SELECT o.total as monto FROM ordenes o WHERE $condicionFechaMes AND o.estado = 'cerrada' AND o.metodo_pago = 'credito' AND NOT EXISTS (SELECT 1 FROM pagos_parciales ppx WHERE ppx.orden_id = o.id)
+  UNION ALL
+  SELECT pp.monto FROM pagos_parciales pp JOIN ordenes o ON pp.orden_id = o.id WHERE $condicionFechaMesPagos AND o.estado = 'cerrada' AND pp.metodo_pago = 'credito'
+) AS combined")->fetchColumn() ?? 0;
+
+$ventasTransferenciaMes = $pdo->query("SELECT COALESCE(SUM(monto), 0) FROM (
+  SELECT o.total as monto FROM ordenes o WHERE $condicionFechaMes AND o.estado = 'cerrada' AND o.metodo_pago = 'transferencia' AND NOT EXISTS (SELECT 1 FROM pagos_parciales ppx WHERE ppx.orden_id = o.id)
+  UNION ALL
+  SELECT pp.monto FROM pagos_parciales pp JOIN ordenes o ON pp.orden_id = o.id WHERE $condicionFechaMesPagos AND o.estado = 'cerrada' AND pp.metodo_pago = 'transferencia'
+) AS combined")->fetchColumn() ?? 0;
+
+$ventasTarjetaMes = $pdo->query("SELECT COALESCE(SUM(monto), 0) FROM (
+  SELECT o.total as monto FROM ordenes o WHERE $condicionFechaMes AND o.estado = 'cerrada' AND o.metodo_pago = 'tarjeta' AND NOT EXISTS (SELECT 1 FROM pagos_parciales ppx WHERE ppx.orden_id = o.id)
+  UNION ALL
+  SELECT pp.monto FROM pagos_parciales pp JOIN ordenes o ON pp.orden_id = o.id WHERE $condicionFechaMesPagos AND o.estado = 'cerrada' AND pp.metodo_pago = 'tarjeta'
+) AS combined")->fetchColumn() ?? 0;
+
+// Estadísticas detalladas por método de pago (incluye pagos parciales)
 $estadisticasMetodoPago = $pdo->query("
-    SELECT 
-        metodo_pago,
-        COUNT(*) as total_ordenes,
-        COALESCE(SUM(total), 0) as total_ventas,
-        COALESCE(AVG(total), 0) as promedio_venta,
-        MIN(total) as venta_minima,
-        MAX(total) as venta_maxima
-    FROM ordenes 
-    WHERE estado = 'cerrada' " . ($condicionFecha ? " AND $condicionFecha" : "") . "
-    GROUP BY metodo_pago
-    ORDER BY total_ventas DESC
+  SELECT
+    metodo_pago,
+    COUNT(*) as total_ordenes,
+    COALESCE(SUM(monto), 0) as total_ventas,
+    COALESCE(AVG(monto), 0) as promedio_venta,
+    MIN(monto) as venta_minima,
+    MAX(monto) as venta_maxima
+  FROM (
+    SELECT CONVERT(o.metodo_pago USING utf8mb4) COLLATE utf8mb4_general_ci as metodo_pago, o.total as monto, o.id as orden_ref
+    FROM ordenes o
+    WHERE o.estado = 'cerrada'" . ($condicionFecha ? " AND DATE(o.creada_en) BETWEEN DATE('$fechaDesde') AND DATE('$fechaHasta')" : "") . "
+      AND NOT EXISTS (SELECT 1 FROM pagos_parciales ppx WHERE ppx.orden_id = o.id)
+    UNION ALL
+    SELECT CONVERT(pp.metodo_pago USING utf8mb4) COLLATE utf8mb4_general_ci as metodo_pago, pp.monto, pp.orden_id as orden_ref
+    FROM pagos_parciales pp
+    JOIN ordenes o ON pp.orden_id = o.id
+    WHERE o.estado = 'cerrada'" . ($condicionFecha ? " AND DATE(o.creada_en) BETWEEN DATE('$fechaDesde') AND DATE('$fechaHasta')" : "") . "
+  ) AS combined_payments
+  WHERE metodo_pago IS NOT NULL
+  GROUP BY metodo_pago
+  ORDER BY total_ventas DESC
 ")->fetchAll(PDO::FETCH_ASSOC);
 
-// Ventas por método de pago por día (últimos 7 días)
+// Ventas por método de pago por día (últimos 7 días) - incluye pagos parciales
 $ventasDiariasMetodoPago = $pdo->query("
-    SELECT 
-        DATE(creada_en) as fecha,
-        metodo_pago,
-        COUNT(*) as ordenes,
-        COALESCE(SUM(total), 0) as total
-    FROM ordenes 
-    WHERE estado = 'cerrada' 
-    AND creada_en >= DATE_SUB(NOW(), INTERVAL 7 DAY)
-    GROUP BY DATE(creada_en), metodo_pago
-    ORDER BY fecha DESC, metodo_pago
+  SELECT
+    fecha,
+    metodo_pago,
+    COUNT(*) as ordenes,
+    COALESCE(SUM(monto), 0) as total
+  FROM (
+    SELECT DATE(o.creada_en) as fecha, CONVERT(o.metodo_pago USING utf8mb4) COLLATE utf8mb4_general_ci as metodo_pago, o.total as monto
+    FROM ordenes o
+    WHERE o.estado = 'cerrada'
+      AND o.creada_en >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+      AND NOT EXISTS (SELECT 1 FROM pagos_parciales ppx WHERE ppx.orden_id = o.id)
+    UNION ALL
+    SELECT DATE(o.creada_en) as fecha, CONVERT(pp.metodo_pago USING utf8mb4) COLLATE utf8mb4_general_ci as metodo_pago, pp.monto
+    FROM pagos_parciales pp
+    JOIN ordenes o ON pp.orden_id = o.id
+    WHERE o.estado = 'cerrada'
+      AND o.creada_en >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+  ) AS combined_payments
+  WHERE metodo_pago IS NOT NULL
+  GROUP BY fecha, metodo_pago
+  ORDER BY fecha DESC, metodo_pago
 ")->fetchAll(PDO::FETCH_ASSOC);
 
 // Datos para gráfico de ventas diarias (según filtros)
@@ -234,6 +401,68 @@ $ordenesCerradasDetalle = $pdo->query("
     ORDER BY o.cerrada_en DESC
     LIMIT $ordenesPorPagina OFFSET $offsetOrdenes
 ")->fetchAll(PDO::FETCH_ASSOC);
+
+// Productos vendidos por tipo para el Cierre Rápido del Día
+$productosVendidosPorTipo = [];
+$productosCanceladosPorTipo = [];
+try {
+    $stmtProdTipo = $pdo->query("
+        SELECT
+            COALESCE(t.nombre, 'Sin tipo') AS tipo_nombre,
+            p.nombre AS producto_nombre,
+            SUM(op.cantidad - op.cancelado) AS total_cantidad
+        FROM orden_productos op
+        JOIN productos p ON op.producto_id = p.id
+        LEFT JOIN type t ON p.type = t.id
+        JOIN ordenes o ON op.orden_id = o.id
+        WHERE o.estado = 'cerrada'
+          AND $condicionFechaHoyPagos
+        GROUP BY t.id, t.nombre, p.id, p.nombre
+        HAVING SUM(op.cantidad - op.cancelado) > 0
+        ORDER BY COALESCE(t.nombre, 'Sin tipo'), p.nombre
+    ");
+    foreach ($stmtProdTipo->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $tipo = $row['tipo_nombre'];
+        if (!isset($productosVendidosPorTipo[$tipo])) {
+            $productosVendidosPorTipo[$tipo] = [];
+        }
+        $productosVendidosPorTipo[$tipo][] = [
+            'nombre'   => $row['producto_nombre'],
+            'cantidad' => (int)$row['total_cantidad'],
+        ];
+      // Cancelados
+      $stmtCancelados = $pdo->query("
+        SELECT
+          COALESCE(t.nombre, 'Sin tipo') AS tipo_nombre,
+          p.nombre AS producto_nombre,
+          SUM(op.cancelado) AS total_cancelado
+        FROM orden_productos op
+        JOIN productos p ON op.producto_id = p.id
+        LEFT JOIN type t ON p.type = t.id
+        JOIN ordenes o ON op.orden_id = o.id
+        WHERE o.estado = 'cerrada'
+          AND op.cancelado > 0
+          AND $condicionFechaHoyPagos
+        GROUP BY t.id, t.nombre, p.id, p.nombre
+        HAVING SUM(op.cancelado) > 0
+        ORDER BY COALESCE(t.nombre, 'Sin tipo'), p.nombre
+      ");
+      foreach ($stmtCancelados->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $tipo = $row['tipo_nombre'];
+        if (!isset($productosCanceladosPorTipo[$tipo])) {
+          $productosCanceladosPorTipo[$tipo] = [];
+        }
+        $productosCanceladosPorTipo[$tipo][] = [
+          'nombre'   => $row['producto_nombre'],
+          'cantidad' => (int)$row['total_cancelado'],
+        ];
+      }
+    }
+} catch (Exception $eP) {
+    // Si la tabla type no existe o hay otro error, continuar sin datos
+    $productosVendidosPorTipo = [];
+    $productosCanceladosPorTipo = [];
+}
 ?>
 
 <!-- Header de Página -->
@@ -269,7 +498,7 @@ $ordenesCerradasDetalle = $pdo->query("
           </label>
           <input type="date" id="fecha-desde"
             class="w-full px-4 py-3 bg-dark-600/50 border border-dark-500/50 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-            value="<?= date('Y-m-d') ?>">
+            value="<?= htmlspecialchars($fechaDesde) ?>">
         </div>
 
         <div class="w-full sm:w-auto">
@@ -278,7 +507,7 @@ $ordenesCerradasDetalle = $pdo->query("
           </label>
           <input type="date" id="fecha-hasta"
             class="w-full px-4 py-3 bg-dark-600/50 border border-dark-500/50 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-            value="<?= date('Y-m-d') ?>">
+            value="<?= htmlspecialchars($fechaHasta) ?>">
         </div>
 
         <button onclick="filtrarPorFecha()"
@@ -394,6 +623,108 @@ $ordenesCerradasDetalle = $pdo->query("
 </div>
 
 <!-- 📈 Comparativa: Semana y Mes -->
+<div class="mb-8">
+  <div class="bg-dark-700/30 backdrop-blur-xl rounded-2xl border border-dark-600/50 p-6">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div>
+        <h3 class="text-xl font-semibold text-white">Cierre Rápido del Día</h3>
+        <p class="text-gray-400 text-sm">Calcula venta tarjeta, gastos y efectivo neto del día en un modal.</p>
+      </div>
+      <button type="button" onclick="abrirModalCierreDia()"
+        class="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold transition-colors flex items-center gap-2">
+        <i class="bi bi-calculator"></i>
+        <span>Calcular Cierre</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Cierre Rápido del Día -->
+<div id="modal-cierre-dia" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/70 p-4">
+  <div class="w-full max-w-3xl bg-dark-800 border border-dark-600 rounded-2xl shadow-2xl overflow-hidden">
+    <div class="px-6 py-4 border-b border-dark-600 flex items-center justify-between">
+      <div>
+        <h4 class="text-xl font-semibold text-white">Cierre Rápido del Día</h4>
+        <p class="text-xs text-gray-400">Datos base automáticos + gastos manuales</p>
+      </div>
+      <button type="button" onclick="cerrarModalCierreDia()" class="text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
+    </div>
+
+    <div class="p-6 space-y-5">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="bg-dark-700/60 rounded-xl p-4 border border-dark-600">
+          <p class="text-gray-400 text-xs mb-1">Venta total (Total Real Cobrado)</p>
+          <p id="cierre-venta-total" class="text-green-400 text-2xl font-bold">$0.00</p>
+        </div>
+        <div class="bg-dark-700/60 rounded-xl p-4 border border-dark-600">
+          <p class="text-gray-400 text-xs mb-1">Venta tarjeta (Débito + Crédito)</p>
+          <p id="cierre-venta-tarjeta" class="text-blue-400 text-2xl font-bold">$0.00</p>
+        </div>
+        <div class="bg-dark-700/60 rounded-xl p-4 border border-dark-600">
+          <p class="text-gray-400 text-xs mb-1">Transferencia</p>
+          <p id="cierre-transferencia" class="text-indigo-400 text-2xl font-bold">$0.00</p>
+        </div>
+      </div>
+
+      <div class="bg-dark-700/60 rounded-xl p-4 border border-pink-900/40 flex items-center justify-between gap-4">
+        <div>
+          <p class="text-gray-400 text-xs mb-1">Propina <span class="text-yellow-300 font-semibold">(Ver en terminal)</span></p>
+          <p class="text-xs text-gray-500">Capturar propinas del día</p>
+        </div>
+        <div class="flex items-center gap-1">
+          <span class="text-pink-400 text-xl font-bold">$</span>
+          <input type="number" id="cierre-propina" step="0.01" min="0" value="0"
+            class="w-28 px-2 py-1 bg-dark-800 border border-dark-600 rounded-lg text-pink-400 text-2xl font-bold text-right focus:outline-none focus:border-pink-500"
+            placeholder="0.00" oninput="recalcularCierreDia()">
+        </div>
+      </div>
+
+      <div class="bg-dark-700/40 rounded-xl p-4 border border-dark-600">
+        <div class="flex items-center justify-between mb-3">
+          <h5 class="text-white font-semibold">Gastos</h5>
+          <button type="button" onclick="agregarFilaGasto()" class="px-3 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg text-sm font-semibold">
+            <i class="bi bi-plus-lg"></i> Agregar gasto
+          </button>
+        </div>
+
+        <div id="gastos-lista" class="space-y-2"></div>
+
+        <div class="mt-3 pt-3 border-t border-dark-600 flex items-center justify-between">
+          <span class="text-gray-300">Total gastos</span>
+          <span id="cierre-total-gastos" class="text-yellow-400 text-xl font-bold">$0.00</span>
+        </div>
+      </div>
+
+      <!-- Productos vendidos por tipo -->
+      <div class="bg-dark-700/40 rounded-xl border border-dark-600 overflow-hidden">
+        <button type="button" onclick="toggleProductosCierre()" class="w-full px-4 py-3 flex items-center justify-between text-white font-semibold hover:bg-dark-700/60 transition-colors">
+          <span><i class="bi bi-grid-3x3-gap-fill mr-2 text-orange-400"></i> Productos vendidos por tipo</span>
+          <i id="productos-cierre-chevron" class="bi bi-chevron-down transition-transform duration-200"></i>
+        </button>
+        <div id="productos-cierre-lista" class="hidden max-h-64 overflow-y-auto px-4 pb-4 pt-1 space-y-3 border-t border-dark-600">
+          <!-- Poblada por JS con datos de PHP -->
+        </div>
+      </div>
+
+      <div class="bg-emerald-700/20 border border-emerald-500/40 rounded-xl p-5 flex items-center justify-between">
+        <div>
+          <p class="text-emerald-200 text-sm">Efectivo (Venta total - Venta tarjeta - Transferencia - Propina - Gastos)</p>
+          <p id="cierre-formula" class="text-xs text-emerald-300 mt-1">$0.00 - $0.00 - $0.00</p>
+        </div>
+        <p id="cierre-efectivo" class="text-3xl font-bold text-emerald-300">$0.00</p>
+      </div>
+    </div>
+
+    <div class="px-6 py-4 border-t border-dark-600 flex justify-end gap-3">
+      <button type="button" onclick="imprimirCierreRapidoTermica()" class="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold flex items-center gap-2">
+        <i class="bi bi-receipt"></i>
+        <span>Imprimir térmica</span>
+      </button>
+      <button type="button" onclick="cerrarModalCierreDia()" class="px-5 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg font-semibold">Cerrar</button>
+    </div>
+  </div>
+</div>
+
 <div class="mb-8">
   <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
     <!-- Semana -->
@@ -2411,35 +2742,6 @@ if ($esAdministrador || hasPermission('reportes', 'ver')):
 
     <?php endif; ?>
 
-    // Funciones para filtrar por fecha
-    function filtrarPorFecha() {
-      const fechaDesde = document.getElementById('fecha-desde').value;
-      const fechaHasta = document.getElementById('fecha-hasta').value;
-
-      if (!fechaDesde || !fechaHasta) {
-        alert('Por favor selecciona ambas fechas');
-        return;
-      }
-
-      if (fechaDesde > fechaHasta) {
-        alert('La fecha "Desde" no puede ser mayor que la fecha "Hasta"');
-        return;
-      }
-
-      // Construir URL con parámetros de fecha
-      const params = new URLSearchParams();
-      params.append('fecha_desde', fechaDesde);
-      params.append('fecha_hasta', fechaHasta);
-
-      // Recargar la página con los filtros aplicados
-      window.location.href = 'index.php?page=reportes&' + params.toString();
-    }
-
-    function limpiarFiltros() {
-      // Volver a la página sin filtros
-      window.location.href = 'index.php?page=reportes';
-    }
-
     // Función para establecer fechas desde URL y cargar datos
     document.addEventListener('DOMContentLoaded', function() {
       const urlParams = new URLSearchParams(window.location.search);
@@ -2461,13 +2763,11 @@ if ($esAdministrador || hasPermission('reportes', 'ver')):
         }
       }
 
-      // Si hay filtros de fecha aplicados, cargar las órdenes vía AJAX
-      if (fechaDesde && fechaHasta) {
-        // Dar tiempo a que se cargue completamente la página
-        setTimeout(() => {
-          cargarOrdenesAjax(parseInt(paginaOrdenes));
-        }, 100);
-      }
+      // Mantener paginación visible sin llamada AJAX automática.
+      actualizarControlesPaginacion({
+        pagina_actual: <?= (int)$paginaOrdenes ?>,
+        total_paginas: <?= (int)$totalPaginasOrdenes ?>
+      });
     });
 
     // Función para cambiar página de órdenes manteniendo filtros
@@ -2788,26 +3088,13 @@ if ($esAdministrador || hasPermission('reportes', 'ver')):
         return;
       }
 
-      // Actualizar URL sin recargar toda la página
-      const params = new URLSearchParams(window.location.search);
+      // Recargar la página completa para evitar errores 500 en endpoint AJAX
+      const params = new URLSearchParams();
+      params.set('page', 'reportes');
       params.set('fecha_desde', fechaDesde);
       params.set('fecha_hasta', fechaHasta);
-      params.delete('pagina_ordenes'); // Resetear a página 1
-
-      // Actualizar URL en el navegador
-      const newUrl = 'index.php?page=reportes&' + params.toString();
-      window.history.pushState({}, '', newUrl);
-
-      // Solo recargar las órdenes via AJAX (página 1)
-      cargarOrdenesAjax(1);
-
-      // Actualizar el badge de período en la sección de órdenes
-      const textoPeriodo = `del ${fechaDesde.split('-').reverse().join('/')} al ${fechaHasta.split('-').reverse().join('/')}`;
-      document.getElementById('ordenes-periodo').textContent = textoPeriodo;
-
-      // Para el resto de las secciones, necesitamos recargar la página completa
-      // Esto lo haremos solo si el usuario lo solicita específicamente
-      mostrarOpcionRecargaCompleta();
+      params.set('pagina_ordenes', '1');
+      window.location.href = 'index.php?' + params.toString();
     }
 
     // Función para mostrar opción de recarga completa
@@ -2860,28 +3147,14 @@ if ($esAdministrador || hasPermission('reportes', 'ver')):
 
     // Función para limpiar filtros de fecha
     function limpiarFiltros() {
-      // Limpiar campos de fecha
-      document.getElementById('fecha-desde').value = '';
-      document.getElementById('fecha-hasta').value = '';
-
-      // Limpiar parámetros de la URL
-      const params = new URLSearchParams(window.location.search);
-      params.delete('fecha_desde');
-      params.delete('fecha_hasta');
-      params.delete('pagina_ordenes');
-
-      // Actualizar URL
-      const newUrl = 'index.php?page=reportes&' + params.toString();
-      window.history.pushState({}, '', newUrl);
-
-      // Recargar órdenes (página 1)
-      cargarOrdenesAjax(1);
-
-      // Actualizar texto del período
-      document.getElementById('ordenes-periodo').textContent = 'del día de hoy';
-
-      // Mostrar mensaje de confirmación
-      mostrarMensajeExito('Filtros eliminados. Mostrando órdenes del día de hoy.');
+      // Siempre volver al día actual
+      const hoy = new Date().toISOString().split('T')[0];
+      const params = new URLSearchParams();
+      params.set('page', 'reportes');
+      params.set('fecha_desde', hoy);
+      params.set('fecha_hasta', hoy);
+      params.set('pagina_ordenes', '1');
+      window.location.href = 'index.php?' + params.toString();
     }
 
     // Función para mostrar mensaje de éxito
@@ -2914,4 +3187,244 @@ if ($esAdministrador || hasPermission('reportes', 'ver')):
         setTimeout(() => toast.remove(), 300);
       }
     }
+
+    // Modal de cierre rápido
+    const cierreVentaTotalBase = <?= json_encode((float)$ventasHoy) ?>;
+    const cierreVentaTarjetaBase = <?= json_encode((float)$ventasDebitoHoy + (float)$ventasCreditoHoy) ?>;
+    const cierreTransferenciaBase = <?= json_encode((float)$ventasTransferenciaHoy) ?>;
+    const cierreProductosPorTipo = <?= json_encode($productosVendidosPorTipo) ?>;
+  const cierreProductosCanceladosPorTipo = <?= json_encode($productosCanceladosPorTipo) ?>;
+
+    function formatearMoneda(valor) {
+      return '$' + Number(valor || 0).toLocaleString('es-MX', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      });
+    }
+
+    function abrirModalCierreDia() {
+      const modal = document.getElementById('modal-cierre-dia');
+      if (!modal) return;
+
+      document.getElementById('cierre-venta-total').textContent = formatearMoneda(cierreVentaTotalBase);
+      document.getElementById('cierre-venta-tarjeta').textContent = formatearMoneda(cierreVentaTarjetaBase);
+      document.getElementById('cierre-transferencia').textContent = formatearMoneda(cierreTransferenciaBase);
+
+      const lista = document.getElementById('gastos-lista');
+      lista.innerHTML = '';
+      const propinaInput = document.getElementById('cierre-propina');
+      if (propinaInput) propinaInput.value = '0';
+      agregarFilaGasto();
+      recalcularCierreDia();
+      popProductosCierre();
+
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function cerrarModalCierreDia() {
+      const modal = document.getElementById('modal-cierre-dia');
+      if (!modal) return;
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    function agregarFilaGasto(concepto = '', monto = '') {
+      const lista = document.getElementById('gastos-lista');
+      if (!lista) return;
+
+      const fila = document.createElement('div');
+      fila.className = 'grid grid-cols-12 gap-2 items-center gasto-row';
+      fila.innerHTML = `
+        <div class="col-span-7">
+          <input type="text" class="gasto-concepto w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-white" placeholder="Concepto" value="${concepto}">
+        </div>
+        <div class="col-span-4">
+          <input type="number" step="0.01" min="0" class="gasto-monto w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-white text-right" placeholder="0.00" value="${monto}">
+        </div>
+        <div class="col-span-1 text-right">
+          <button type="button" class="text-red-400 hover:text-red-300" onclick="eliminarFilaGasto(this)">
+            <i class="bi bi-trash"></i>
+          </button>
+        </div>
+      `;
+
+      lista.appendChild(fila);
+
+      const montoInput = fila.querySelector('.gasto-monto');
+      const conceptoInput = fila.querySelector('.gasto-concepto');
+      montoInput.addEventListener('input', recalcularCierreDia);
+      conceptoInput.addEventListener('input', recalcularCierreDia);
+    }
+
+    function eliminarFilaGasto(btn) {
+      const row = btn.closest('.gasto-row');
+      if (row) row.remove();
+      recalcularCierreDia();
+    }
+
+    function toggleProductosCierre() {
+      const lista = document.getElementById('productos-cierre-lista');
+      const chevron = document.getElementById('productos-cierre-chevron');
+      if (lista.classList.contains('hidden')) {
+        lista.classList.remove('hidden');
+        chevron.style.transform = 'rotate(180deg)';
+      } else {
+        lista.classList.add('hidden');
+        chevron.style.transform = '';
+      }
+    }
+
+    function popProductosCierre() {
+      const container = document.getElementById('productos-cierre-lista');
+      if (!container) return;
+      const tiposVendidos = Object.keys(cierreProductosPorTipo);
+      const tiposCancelados = Object.keys(cierreProductosCanceladosPorTipo);
+      if (tiposVendidos.length === 0 && tiposCancelados.length === 0) {
+        container.innerHTML = '<p class="text-gray-400 text-sm text-center py-3">Sin productos en este período</p>';
+        return;
+      }
+      let html = '';
+      // Preparados
+      if (tiposVendidos.length > 0) {
+        for (const tipo of tiposVendidos) {
+          const prods = cierreProductosPorTipo[tipo];
+          const total = prods.reduce((s, p) => s + p.cantidad, 0);
+          html += `<div>
+          <div class="flex items-center justify-between mb-1">
+            <p class="text-orange-400 font-semibold text-sm uppercase tracking-wide">${tipo}</p>
+            <span class="text-orange-300 text-xs font-bold">${total} pzas</span>
+          </div>
+          <ul class="space-y-0.5 ml-2">`;
+          for (const p of prods) {
+            html += `<li class="flex justify-between text-gray-200 text-sm">
+            <span>${p.nombre}</span>
+            <span class="text-white font-bold ml-4 min-w-[2rem] text-right">${p.cantidad}</span>
+          </li>`;
+          }
+          html += '</ul></div>';
+        }
+      } else {
+        html += '<p class="text-gray-400 text-sm text-center py-2">Sin productos preparados en este período</p>';
+      }
+      // Cancelados
+      if (tiposCancelados.length > 0) {
+        html += `<div class="mt-3 pt-3 border-t border-red-900/50">
+          <p class="text-red-400 font-semibold text-xs uppercase tracking-wider mb-2"><i class="bi bi-x-circle mr-1"></i>Cancelados</p>`;
+        for (const tipo of tiposCancelados) {
+          const prods = cierreProductosCanceladosPorTipo[tipo];
+          const total = prods.reduce((s, p) => s + p.cantidad, 0);
+          html += `<div class="mt-1">
+          <div class="flex items-center justify-between mb-1">
+            <p class="text-red-400/80 font-semibold text-sm uppercase tracking-wide">${tipo}</p>
+            <span class="text-red-300 text-xs font-bold">${total} pzas</span>
+          </div>
+          <ul class="space-y-0.5 ml-2">`;
+          for (const p of prods) {
+            html += `<li class="flex justify-between text-red-200/80 text-sm">
+            <span>${p.nombre}</span>
+            <span class="text-red-300 font-bold ml-4 min-w-[2rem] text-right">${p.cantidad}</span>
+          </li>`;
+          }
+          html += '</ul></div>';
+        }
+        html += '</div>';
+      }
+      container.innerHTML = html;
+    }
+
+    function recalcularCierreDia() {
+      const montos = Array.from(document.querySelectorAll('.gasto-monto'));
+      const totalGastos = montos.reduce((acc, input) => acc + (parseFloat(input.value) || 0), 0);
+  const propina = parseFloat(document.getElementById('cierre-propina')?.value || '0') || 0;
+
+      const efectivo = cierreVentaTotalBase - cierreVentaTarjetaBase - cierreTransferenciaBase - propina - totalGastos;
+
+      document.getElementById('cierre-total-gastos').textContent = formatearMoneda(totalGastos);
+      document.getElementById('cierre-efectivo').textContent = formatearMoneda(efectivo);
+      document.getElementById('cierre-formula').textContent = `${formatearMoneda(cierreVentaTotalBase)} - T:${formatearMoneda(cierreVentaTarjetaBase)} - Tr:${formatearMoneda(cierreTransferenciaBase)} - Prop:${formatearMoneda(propina)} - G:${formatearMoneda(totalGastos)}`;
+    }
+
+    async function imprimirCierreRapidoTermica() {
+      const gastosRows = Array.from(document.querySelectorAll('.gasto-row'));
+      const gastos = gastosRows
+        .map((row) => {
+          const concepto = (row.querySelector('.gasto-concepto')?.value || '').trim();
+          const monto = parseFloat(row.querySelector('.gasto-monto')?.value || '0') || 0;
+          return { concepto, monto };
+        })
+        .filter((g) => g.concepto !== '' || g.monto > 0);
+
+      const totalGastos = gastos.reduce((acc, g) => acc + g.monto, 0);
+      const propina = parseFloat(document.getElementById('cierre-propina')?.value || '0') || 0;
+      const efectivo = cierreVentaTotalBase - cierreVentaTarjetaBase - cierreTransferenciaBase - propina - totalGastos;
+
+      const urlParams = new URLSearchParams(window.location.search);
+      const fechaDesdeActual = urlParams.get('fecha_desde') || document.getElementById('fecha-desde')?.value || new Date().toISOString().split('T')[0];
+      const fechaHastaActual = urlParams.get('fecha_hasta') || document.getElementById('fecha-hasta')?.value || fechaDesdeActual;
+
+      Swal.fire({
+        title: 'Imprimiendo cierre...',
+        text: 'Enviando ticket térmico a la impresora configurada',
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading()
+      });
+
+      try {
+        const response = await fetch('controllers/imprimir_termica.php', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            tipo: 'cierre_rapido',
+            fecha_desde: fechaDesdeActual,
+            fecha_hasta: fechaHastaActual,
+            venta_total: cierreVentaTotalBase,
+            venta_tarjeta: cierreVentaTarjetaBase,
+            transferencia: cierreTransferenciaBase,
+            gastos,
+            total_gastos: totalGastos,
+            efectivo,
+            propina,
+            productos_por_tipo: cierreProductosPorTipo,
+            productos_cancelados_por_tipo: cierreProductosCanceladosPorTipo
+          })
+        });
+
+        const resultado = await response.json();
+        Swal.close();
+
+        if (resultado.success) {
+          Swal.fire({
+            icon: 'success',
+            title: 'Ticket impreso',
+            text: resultado.message || 'Cierre rápido enviado a impresora térmica',
+            confirmButtonColor: '#16a34a'
+          });
+        } else {
+          Swal.fire({
+            icon: 'error',
+            title: 'Error al imprimir',
+            text: resultado.message || resultado.error || 'No se pudo imprimir el cierre rápido',
+            confirmButtonColor: '#dc2626'
+          });
+        }
+      } catch (error) {
+        Swal.close();
+        Swal.fire({
+          icon: 'error',
+          title: 'Error de conexión',
+          text: 'No se pudo conectar con el servidor de impresión',
+          confirmButtonColor: '#dc2626'
+        });
+        console.error('Error imprimiendo cierre rápido:', error);
+      }
+    }
+
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        cerrarModalCierreDia();
+      }
+    });
   </script>

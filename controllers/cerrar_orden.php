@@ -7,6 +7,7 @@ if (!isset($_POST['orden_id'])) {
 }
 
 $orden_id = intval($_POST['orden_id']);
+$es_division = isset($_POST['es_division']) && $_POST['es_division'] == '1';
 $metodo_pago = $_POST['metodo_pago'] ?? 'efectivo'; // Default a efectivo si no se especifica
 
 // Capturar información del pago en efectivo
@@ -28,9 +29,10 @@ $pdo = conexion();
 try {
     // Validaciones previas (ANTES de iniciar transacción)
     
-    // Obtener información de la orden
+    // Obtener información de la orden incluyendo datos de división
     $orden = $pdo->prepare("
-        SELECT o.mesa_id, m.nombre as mesa_nombre 
+        SELECT o.mesa_id, o.division_cuenta, o.numero_divisiones, o.estado_division, 
+               o.total, m.nombre as mesa_nombre 
         FROM ordenes o 
         JOIN mesas m ON o.mesa_id = m.id 
         WHERE o.id = ? AND o.estado = 'abierta'
@@ -43,6 +45,37 @@ try {
     }
     
     $mesa_id = $orden_data['mesa_id'];
+    
+    // ⚡ VALIDACIONES ESPECÍFICAS PARA DIVISIÓN DE CUENTA
+    if ($es_division || $orden_data['division_cuenta']) {
+        // Verificar que todos los pagos parciales estén completos
+        $stmt_pagos = $pdo->prepare("
+            SELECT COALESCE(SUM(monto), 0) as total_pagado 
+            FROM pagos_parciales 
+            WHERE orden_id = ?
+        ");
+        $stmt_pagos->execute([$orden_id]);
+        $total_pagado = $stmt_pagos->fetchColumn();
+        
+        $diferencia = abs($orden_data['total'] - $total_pagado);
+        
+        if ($diferencia > 0.01) { // Tolerancia de 1 centavo por redondeo
+            throw new Exception("No se puede cerrar la orden. Los pagos parciales ($" . number_format($total_pagado, 2) . 
+                              ") no coinciden con el total de la orden ($" . number_format($orden_data['total'], 2) . ")");
+        }
+        
+        // Actualizar estado de división a 'completada' si no lo está
+        if ($orden_data['estado_division'] !== 'completada') {
+            $stmt_update = $pdo->prepare("UPDATE ordenes SET estado_division = 'completada' WHERE id = ?");
+            $stmt_update->execute([$orden_id]);
+        }
+        
+        // Para órdenes con división, no usamos metodo_pago único 
+        // porque ya está registrado en cada pago parcial
+        $metodo_pago = 'division'; // Marcador especial
+        $dinero_recibido = null;
+        $cambio = null;
+    }
     
     // ✅ VALIDAR QUE NO HAY PRODUCTOS SIN PREPARAR
     $productos_sin_preparar = $pdo->prepare("
@@ -287,7 +320,20 @@ try {
     $pdo->beginTransaction();
     
     // Actualizar la orden con subtotal, total, método de pago, dinero recibido, cambio y fecha de cierre
-    if ($metodo_pago === 'efectivo' && $dinero_recibido !== null) {
+    if ($metodo_pago === 'division') {
+        // Para órdenes con división de cuenta, no guardamos método de pago único
+        // porque cada pago parcial tiene su propio método
+        $update_orden = $pdo->prepare("
+            UPDATE ordenes 
+            SET estado = 'cerrada',
+                subtotal = ?,
+                total = ?,
+                metodo_pago = NULL,
+                cerrada_en = NOW()
+            WHERE id = ?
+        ");
+        $result = $update_orden->execute([$subtotal, $total, $orden_id]);
+    } elseif ($metodo_pago === 'efectivo' && $dinero_recibido !== null) {
         $update_orden = $pdo->prepare("
             UPDATE ordenes 
             SET estado = 'cerrada',
@@ -346,26 +392,56 @@ try {
     session_start();
     $usuario_id = $_SESSION['user_id'] ?? null;
     
-    $metodos_nombres = [
-        'efectivo' => 'Efectivo',
-        'debito' => 'Débito', 
-        'credito' => 'Crédito',
-        'transferencia' => 'Transferencia'
-    ];
-    $nombre_metodo = $metodos_nombres[$metodo_pago] ?? ucfirst($metodo_pago);
-    
-    $detalle_historial = "Orden cerrada exitosamente. Total: $" . number_format($total, 2) . ". Método de pago: " . $nombre_metodo;
-    
-    if ($metodo_pago === 'efectivo' && $dinero_recibido !== null) {
-        $detalle_historial .= ". Dinero recibido: $" . number_format($dinero_recibido, 2);
-        if ($cambio !== null && $cambio > 0) {
-            $detalle_historial .= ". Cambio: $" . number_format($cambio, 2);
-        } else {
-            $detalle_historial .= ". Pago exacto";
+    // Generar detalle del historial según tipo de pago
+    if ($metodo_pago === 'division') {
+        // Para división de cuenta, obtener todos los pagos parciales
+        $stmt_pagos = $pdo->prepare("
+            SELECT numero_pago, monto, metodo_pago, dinero_recibido, cambio
+            FROM pagos_parciales
+            WHERE orden_id = ?
+            ORDER BY numero_pago ASC
+        ");
+        $stmt_pagos->execute([$orden_id]);
+        $pagos = $stmt_pagos->fetchAll();
+        
+        $detalle_historial = "Orden cerrada con división de cuenta ({$orden_data['numero_divisiones']} pagos). Total: $" . number_format($total, 2);
+        
+        $metodos_nombres = [
+            'efectivo' => 'Efectivo',
+            'debito' => 'Débito',
+            'credito' => 'Crédito',
+            'transferencia' => 'Transferencia'
+        ];
+        
+        foreach ($pagos as $pago) {
+            $metodo_nombre = $metodos_nombres[$pago['metodo_pago']] ?? ucfirst($pago['metodo_pago']);
+            $detalle_historial .= " | Pago #{$pago['numero_pago']}: $" . number_format($pago['monto'], 2) . " ({$metodo_nombre})";
         }
+        
+        $detalle_historial .= ". Mesa: " . $orden_data['mesa_nombre'];
+    } else {
+        // Pago único
+        $metodos_nombres = [
+            'efectivo' => 'Efectivo',
+            'debito' => 'Débito', 
+            'credito' => 'Crédito',
+            'transferencia' => 'Transferencia'
+        ];
+        $nombre_metodo = $metodos_nombres[$metodo_pago] ?? ucfirst($metodo_pago);
+        
+        $detalle_historial = "Orden cerrada exitosamente. Total: $" . number_format($total, 2) . ". Método de pago: " . $nombre_metodo;
+        
+        if ($metodo_pago === 'efectivo' && $dinero_recibido !== null) {
+            $detalle_historial .= ". Dinero recibido: $" . number_format($dinero_recibido, 2);
+            if ($cambio !== null && $cambio > 0) {
+                $detalle_historial .= ". Cambio: $" . number_format($cambio, 2);
+            } else {
+                $detalle_historial .= ". Pago exacto";
+            }
+        }
+        
+        $detalle_historial .= ". Mesa: " . $orden_data['mesa_nombre'];
     }
-    
-    $detalle_historial .= ". Mesa: " . $orden_data['mesa_nombre'];
     
     $stmt_historial = $pdo->prepare("
         INSERT INTO historial_ordenes (orden_id, accion, detalle, usuario_id) 
@@ -387,15 +463,27 @@ try {
     $impresion_automatica = ($config_datos['impresion_automatica'] ?? '0') == '1';
     $nombre_impresora = $config_datos['nombre_impresora'] ?? '';
     
-    // Preparar parámetros de redirección (usar la variable ya definida)
-    $mensajeSuccess = "Orden cerrada exitosamente. Total: $" . number_format($total, 2) . " - Método: " . $nombre_metodo;
-    
-    if ($metodo_pago === 'efectivo' && $dinero_recibido !== null) {
-        $mensajeSuccess .= " - Recibido: $" . number_format($dinero_recibido, 2);
-        if ($cambio !== null && $cambio > 0) {
-            $mensajeSuccess .= " - Cambio: $" . number_format($cambio, 2);
-        } else {
-            $mensajeSuccess .= " - Pago exacto";
+    // Preparar parámetros de redirección
+    if ($metodo_pago === 'division') {
+        $mensajeSuccess = "Orden cerrada con división de cuenta ({$orden_data['numero_divisiones']} pagos). Total: $" . number_format($total, 2);
+    } else {
+        $metodos_nombres = [
+            'efectivo' => 'Efectivo',
+            'debito' => 'Débito',
+            'credito' => 'Crédito',
+            'transferencia' => 'Transferencia'
+        ];
+        $nombre_metodo = $metodos_nombres[$metodo_pago] ?? ucfirst($metodo_pago);
+        
+        $mensajeSuccess = "Orden cerrada exitosamente. Total: $" . number_format($total, 2) . " - Método: " . $nombre_metodo;
+        
+        if ($metodo_pago === 'efectivo' && $dinero_recibido !== null) {
+            $mensajeSuccess .= " - Recibido: $" . number_format($dinero_recibido, 2);
+            if ($cambio !== null && $cambio > 0) {
+                $mensajeSuccess .= " - Cambio: $" . number_format($cambio, 2);
+            } else {
+                $mensajeSuccess .= " - Pago exacto";
+            }
         }
     }
     
@@ -693,23 +781,59 @@ try {
             // Información del pago
             $impresora->linea('-', 45);
             
-            // Formatear método de pago para impresión
-            $metodos_formato = [
-                'efectivo' => 'EFECTIVO',
-                'debito' => 'TARJETA DE DÉBITO',
-                'credito' => 'TARJETA DE CRÉDITO',
-                'transferencia' => 'TRANSFERENCIA BANCARIA'
-            ];
-            $metodo_formateado = $metodos_formato[$orden_data['metodo_pago']] ?? strtoupper($orden_data['metodo_pago']);
-            
-            $impresora->texto('METODO DE PAGO: ' . $metodo_formateado, 'left', true);
-            
-            if ($orden_data['metodo_pago'] === 'efectivo' && $orden_data['dinero_recibido'] !== null) {
-                $impresora->texto('Dinero recibido: $' . number_format($orden_data['dinero_recibido'], 2), 'left');
-                if ($orden_data['cambio'] !== null && $orden_data['cambio'] > 0) {
-                    $impresora->texto('Cambio: $' . number_format($orden_data['cambio'], 2), 'left', true);
-                } else {
-                    $impresora->texto('Pago exacto', 'left');
+            // Verificar si es una orden con división de cuenta
+            if ($orden_data['division_cuenta']) {
+                $impresora->texto('DIVISION DE CUENTA', 'center', true);
+                $impresora->texto($orden_data['numero_divisiones'] . ' pagos realizados', 'center');
+                $impresora->saltoLinea();
+                
+                // Obtener y mostrar todos los pagos parciales
+                $stmt_pagos = $pdo->prepare("
+                    SELECT numero_pago, monto, metodo_pago, dinero_recibido, cambio
+                    FROM pagos_parciales
+                    WHERE orden_id = ?
+                    ORDER BY numero_pago ASC
+                ");
+                $stmt_pagos->execute([$orden_id]);
+                $pagos_parciales = $stmt_pagos->fetchAll();
+                
+                $metodos_formato = [
+                    'efectivo' => 'Efectivo',
+                    'debito' => 'Débito',
+                    'credito' => 'Crédito',
+                    'transferencia' => 'Transferencia'
+                ];
+                
+                foreach ($pagos_parciales as $pago) {
+                    $metodo_nombre = $metodos_formato[$pago['metodo_pago']] ?? ucfirst($pago['metodo_pago']);
+                    $impresora->texto('Pago #' . $pago['numero_pago'] . ': $' . number_format($pago['monto'], 2) . ' (' . $metodo_nombre . ')', 'left');
+                    
+                    if ($pago['metodo_pago'] === 'efectivo' && $pago['dinero_recibido'] !== null) {
+                        $impresora->texto('  Recibido: $' . number_format($pago['dinero_recibido'], 2), 'left', false, 'small');
+                        if ($pago['cambio'] !== null && $pago['cambio'] > 0) {
+                            $impresora->texto('  Cambio: $' . number_format($pago['cambio'], 2), 'left', false, 'small');
+                        }
+                    }
+                }
+            } else {
+                // Pago único normal
+                $metodos_formato = [
+                    'efectivo' => 'EFECTIVO',
+                    'debito' => 'TARJETA DE DÉBITO',
+                    'credito' => 'TARJETA DE CRÉDITO',
+                    'transferencia' => 'TRANSFERENCIA BANCARIA'
+                ];
+                $metodo_formateado = $metodos_formato[$orden_data['metodo_pago']] ?? strtoupper($orden_data['metodo_pago']);
+                
+                $impresora->texto('METODO DE PAGO: ' . $metodo_formateado, 'left', true);
+                
+                if ($orden_data['metodo_pago'] === 'efectivo' && $orden_data['dinero_recibido'] !== null) {
+                    $impresora->texto('Dinero recibido: $' . number_format($orden_data['dinero_recibido'], 2), 'left');
+                    if ($orden_data['cambio'] !== null && $orden_data['cambio'] > 0) {
+                        $impresora->texto('Cambio: $' . number_format($orden_data['cambio'], 2), 'left', true);
+                    } else {
+                        $impresora->texto('Pago exacto', 'left');
+                    }
                 }
             }
             $impresora->saltoLinea();
