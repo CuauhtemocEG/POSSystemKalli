@@ -57,11 +57,15 @@ try {
         $stmt_pagos->execute([$orden_id]);
         $total_pagado = $stmt_pagos->fetchColumn();
         
+        // 🔒 CRÍTICO: Cuando hay división con pagos, el total es la suma de pagos
+        // NO se debe recalcular con promociones porque los pagos ya se hicieron
         $diferencia = abs($orden_data['total'] - $total_pagado);
         
-        if ($diferencia > 0.01) { // Tolerancia de 1 centavo por redondeo
+        // Tolerancia de $1.00 para manejar redondeos
+        if ($diferencia > 1.00) {
             throw new Exception("No se puede cerrar la orden. Los pagos parciales ($" . number_format($total_pagado, 2) . 
-                              ") no coinciden con el total de la orden ($" . number_format($orden_data['total'], 2) . ")");
+                              ") no coinciden con el total de la orden ($" . number_format($orden_data['total'], 2) . 
+                              "). Diferencia: $" . number_format($diferencia, 2));
         }
         
         // Actualizar estado de división a 'completada' si no lo está
@@ -101,22 +105,43 @@ try {
     $subtotal_query->execute([$orden_id]);
     $subtotal = $subtotal_query->fetchColumn() ?? 0;
     
-    // 🎁 Calcular promociones aplicables para esta orden
-    $total_descuentos_promociones = 0;
-    $promociones_a_guardar = [];
+    // 🔒 PROTECCIÓN: Si hay división con pagos, NO recalcular total con promociones
+    // El total ya está definido por los pagos realizados
+    $recalcular_total = true;
+    if ($orden_data['division_cuenta']) {
+        $stmt_check_pagos = $pdo->prepare("SELECT COUNT(*) FROM pagos_parciales WHERE orden_id = ?");
+        $stmt_check_pagos->execute([$orden_id]);
+        $tiene_pagos = $stmt_check_pagos->fetchColumn() > 0;
+        
+        if ($tiene_pagos) {
+            $recalcular_total = false;
+            // Usar el total actual de la orden (que es la suma de pagos)
+            $total = $orden_data['total'];
+            $total_descuentos_promociones = 0;
+            $descuento_porcentaje_aplicado = 0;
+            $promociones_a_guardar = [];
+            
+            error_log("🔒 Orden {$orden_id} con división y pagos: NO se recalcula total. Usando total de pagos: $" . $total);
+        }
+    }
     
-    // Verificar si la mesa tiene promociones activadas
-    $mesa_config = $pdo->prepare("SELECT aplicar_promociones, es_para_llevar FROM mesas WHERE id = ?");
-    $mesa_config->execute([$mesa_id]);
-    $mesa_data = $mesa_config->fetch();
-    $aplicar_promociones = ($mesa_data['aplicar_promociones'] ?? 1) && !($mesa_data['es_para_llevar'] ?? 0);
-    
-    // Obtener si la orden tiene activado descuento personal
-    $stmt_personal = $pdo->prepare("SELECT COALESCE(es_personal, 0) as es_personal FROM ordenes WHERE id = ?");
-    $stmt_personal->execute([$orden_id]);
-    $es_personal = (bool)$stmt_personal->fetchColumn();
-    
-    if ($aplicar_promociones) {
+    if ($recalcular_total) {
+        // 🎁 Calcular promociones aplicables para esta orden (solo si NO hay división con pagos)
+        $total_descuentos_promociones = 0;
+        $promociones_a_guardar = [];
+        
+        // Verificar si la mesa tiene promociones activadas
+        $mesa_config = $pdo->prepare("SELECT aplicar_promociones, es_para_llevar FROM mesas WHERE id = ?");
+        $mesa_config->execute([$mesa_id]);
+        $mesa_data = $mesa_config->fetch();
+        $aplicar_promociones = ($mesa_data['aplicar_promociones'] ?? 1) && !($mesa_data['es_para_llevar'] ?? 0);
+        
+        // Obtener si la orden tiene activado descuento personal
+        $stmt_personal = $pdo->prepare("SELECT COALESCE(es_personal, 0) as es_personal FROM ordenes WHERE id = ?");
+        $stmt_personal->execute([$orden_id]);
+        $es_personal = (bool)$stmt_personal->fetchColumn();
+        
+        if ($aplicar_promociones) {
         try {
             // Obtener productos de la orden para calcular promociones
             $productos_orden = $pdo->prepare("
@@ -294,27 +319,34 @@ try {
         } catch (Exception $e) {
             error_log("Error calculando promociones al cerrar orden {$orden_id}: " . $e->getMessage());
         }
+    } // Fin de if ($aplicar_promociones)
+    } // Fin de if ($recalcular_total)
+    
+    // 💰 Aplicar descuento porcentaje manual si está activado (solo si recalculamos)
+    if (!isset($descuento_porcentaje_aplicado)) {
+        $descuento_porcentaje_aplicado = 0;
     }
     
-    // 💰 Aplicar descuento porcentaje manual si está activado
-    $descuento_porcentaje_aplicado = 0;
-    $stmt_desc = $pdo->prepare("SELECT aplicar_descuento_porcentaje, descuento_porcentaje_valor FROM ordenes WHERE id = ?");
-    $stmt_desc->execute([$orden_id]);
-    $desc_data = $stmt_desc->fetch();
-    
-    if ($desc_data && 
-        $desc_data['aplicar_descuento_porcentaje'] == 1 && 
-        $desc_data['descuento_porcentaje_valor'] > 0) {
+    if ($recalcular_total) {
+        $stmt_desc = $pdo->prepare("SELECT aplicar_descuento_porcentaje, descuento_porcentaje_valor FROM ordenes WHERE id = ?");
+        $stmt_desc->execute([$orden_id]);
+        $desc_data = $stmt_desc->fetch();
         
-        $porcentaje = floatval($desc_data['descuento_porcentaje_valor']);
-        // Aplicar descuento al subtotal (antes de promociones)
-        $descuento_porcentaje_aplicado = ($subtotal * $porcentaje) / 100;
+        if ($desc_data && 
+            $desc_data['aplicar_descuento_porcentaje'] == 1 && 
+            $desc_data['descuento_porcentaje_valor'] > 0) {
+            
+            $porcentaje = floatval($desc_data['descuento_porcentaje_valor']);
+            // Aplicar descuento al subtotal (antes de promociones)
+            $descuento_porcentaje_aplicado = ($subtotal * $porcentaje) / 100;
+            
+            error_log("Descuento % manual aplicado al cerrar orden {$orden_id}: {$porcentaje}% sobre ${subtotal} = ${descuento_porcentaje_aplicado}");
+        }
         
-        error_log("Descuento % manual aplicado al cerrar orden {$orden_id}: {$porcentaje}% sobre ${subtotal} = ${descuento_porcentaje_aplicado}");
+        // Calcular el total final (subtotal - promociones - descuento % manual)
+        $total = $subtotal - $total_descuentos_promociones - $descuento_porcentaje_aplicado;
     }
-    
-    // Calcular el total final (subtotal - promociones - descuento % manual)
-    $total = $subtotal - $total_descuentos_promociones - $descuento_porcentaje_aplicado;
+    // Si NO recalculamos, $total ya está definido desde arriba (suma de pagos)
     
     // AHORA sí iniciar transacción para las operaciones de escritura
     $pdo->beginTransaction();

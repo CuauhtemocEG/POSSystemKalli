@@ -20,6 +20,26 @@ if ($cantidad < 1 || !$producto_id || !$orden_id) {
 
 // Función para actualizar el total de la orden
 function actualizarTotalOrden($pdo, $orden_id) {
+    // 🔒 PROTECCIÓN: Verificar si la orden tiene división de cuenta con pagos
+    $stmt_check = $pdo->prepare("SELECT division_cuenta, estado_division FROM ordenes WHERE id = ?");
+    $stmt_check->execute([$orden_id]);
+    $orden_info = $stmt_check->fetch();
+    
+    if ($orden_info && $orden_info['division_cuenta'] == 1) {
+        // Verificar si ya hay pagos registrados
+        $stmt_pagos = $pdo->prepare("SELECT COUNT(*) FROM pagos_parciales WHERE orden_id = ?");
+        $stmt_pagos->execute([$orden_id]);
+        $tiene_pagos = $stmt_pagos->fetchColumn() > 0;
+        
+        if ($tiene_pagos) {
+            // ⚠️ NO actualizar el total si ya hay pagos parciales registrados
+            // Esto previene desincronización entre pagos y total
+            $stmt_total = $pdo->prepare("SELECT total FROM ordenes WHERE id = ?");
+            $stmt_total->execute([$orden_id]);
+            return $stmt_total->fetchColumn();
+        }
+    }
+    
     try {
         // Intentar con campo cancelado
         $total_query = $pdo->prepare("
