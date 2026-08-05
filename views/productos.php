@@ -288,6 +288,23 @@ $messageType = $_GET['type'] ?? 'success';
                                                 <i class="bi bi-chevron-down absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none"></i>
                                             </div>
                                         </div>
+
+                                        <div>
+                                            <label class="block text-sm font-montserrat-semibold text-gray-300 mb-2">
+                                                <i class="bi bi-cup-hot mr-2 text-amber-400"></i>
+                                                Área de preparación *
+                                            </label>
+                                            <div class="relative">
+                                                <select id="productCategoria" name="categoria" required
+                                                        class="w-full px-4 py-3 border border-dark-600/50 bg-dark-700/50 text-white rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-montserrat-medium appearance-none cursor-pointer hover:bg-dark-700/70">
+                                                    <option value="">Seleccionar área</option>
+                                                    <option value="comidas">Comidas</option>
+                                                    <option value="bebidas">Bebidas</option>
+                                                    <option value="desayunos">Desayunos</option>
+                                                </select>
+                                                <i class="bi bi-chevron-down absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none"></i>
+                                            </div>
+                                        </div>
                                         
                                         <div>
                                             <label class="block text-sm font-montserrat-semibold text-gray-300 mb-2">
@@ -659,6 +676,7 @@ $messageType = $_GET['type'] ?? 'success';
                 document.getElementById('productName').value = product.nombre;
                 document.getElementById('productPrice').value = product.precio;
                 document.getElementById('productCategory').value = product.type;
+                document.getElementById('productCategoria').value = product.categoria || 'comidas';
                 document.getElementById('productDescription').value = product.descripcion || '';
                 document.getElementById('actionType').value = 'edit';
                 
@@ -1009,6 +1027,7 @@ $messageType = $_GET['type'] ?? 'success';
             document.getElementById('productForm').reset();
             document.getElementById('productId').value = '';
             document.getElementById('actionType').value = 'add';
+            document.getElementById('productCategoria').value = 'comidas';
             
             // Reset image preview
             document.getElementById('imagePreview').classList.add('hidden');

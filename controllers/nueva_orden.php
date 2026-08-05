@@ -33,8 +33,30 @@ try {
         exit;
     }
     
-    // Generar código único para la orden
-    $codigo = 'ORD-' . date('Ymd') . '-' . strtoupper(substr(md5(uniqid()), 0, 6));
+    // Generar código único para la orden en formato ORD-YYYYMMDD-KALL001
+    $fecha = date('Ymd');
+    $prefijo = 'ORD-' . $fecha . '-KALL';
+    $numero = 1;
+
+    for ($intento = 0; $intento < 10; $intento++) {
+        $stmt = $pdo->prepare("SELECT codigo FROM ordenes WHERE codigo LIKE ? ORDER BY id DESC LIMIT 1");
+        $stmt->execute([$prefijo . '%']);
+        $ultimo_codigo = $stmt->fetchColumn();
+
+        if ($ultimo_codigo && preg_match('/' . preg_quote($prefijo, '/') . '(\d+)$/', $ultimo_codigo, $matches)) {
+            $numero = intval($matches[1]) + 1;
+        }
+
+        $codigo = $prefijo . str_pad($numero, 3, '0', STR_PAD_LEFT);
+
+        $stmt = $pdo->prepare("SELECT id FROM ordenes WHERE codigo = ?");
+        $stmt->execute([$codigo]);
+        if (!$stmt->fetch()) {
+            break;
+        }
+
+        $numero++;
+    }
     
     // Crear nueva orden con campos básicos, incluyendo el usuario que la abre
     $stmt = $pdo->prepare("INSERT INTO ordenes (mesa_id, codigo, estado, total, usuario_id) VALUES (?, ?, 'abierta', 0.00, ?)");

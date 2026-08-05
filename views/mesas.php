@@ -166,7 +166,7 @@ body, html {
 
 /* Cards de mesa touch-friendly */
 .kiosk-mesa-card {
-    min-height: 200px;
+    min-height: 220px;
     transition: all 0.2s ease;
     cursor: pointer;
     user-select: none;
@@ -177,15 +177,110 @@ body, html {
     transform: scale(0.98);
 }
 
+.mesa-card-shell {
+    position: relative;
+    overflow: hidden;
+    border-radius: 1.5rem;
+    padding: 1.25rem;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: linear-gradient(135deg, rgba(17, 24, 39, 0.95), rgba(31, 41, 55, 0.9));
+    box-shadow: 0 18px 45px rgba(0, 0, 0, 0.22);
+}
+
+.mesa-card-shell::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(120deg, rgba(255,255,255,0.06), transparent 45%, rgba(255,255,255,0.03));
+    pointer-events: none;
+}
+
+.mesa-card-libre {
+    box-shadow: 0 18px 45px rgba(16, 185, 129, 0.12);
+}
+
+.mesa-card-ocupada {
+    box-shadow: 0 18px 45px rgba(244, 63, 94, 0.15);
+}
+
+.mesa-card-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.45rem 0.7rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    border: 1px solid rgba(255,255,255,0.16);
+    backdrop-filter: blur(8px);
+}
+
+.mesa-card-description {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.55rem;
+    padding: 0.75rem 0.85rem;
+    border-radius: 1rem;
+    background: rgba(255, 255, 255, 0.06);
+    color: #e5e7eb;
+    font-size: 0.92rem;
+    margin-bottom: 0.9rem;
+}
+
+.mesa-card-description-muted {
+    color: #cbd5e1;
+}
+
+.mesa-card-info-list {
+    display: grid;
+    gap: 0.6rem;
+    margin-bottom: 1rem;
+}
+
+.mesa-card-info-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.7rem 0.8rem;
+    border-radius: 0.95rem;
+    background: rgba(255, 255, 255, 0.045);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.mesa-card-info-label {
+    display: inline-flex;
+    align-items: center;
+    color: #cbd5e1;
+    font-size: 0.92rem;
+}
+
 /* Botones touch-optimizados */
 .kiosk-touch-button {
     min-height: 56px;
     padding: 1rem 1.5rem;
     font-size: 1.125rem;
     font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    text-decoration: none;
+    border: none;
+    border-radius: 0.9rem;
+    color: #ffffff;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2);
     transition: all 0.2s ease;
     user-select: none;
     -webkit-tap-highlight-color: transparent;
+}
+
+.kiosk-touch-button:hover {
+    transform: translateY(-1px);
+    filter: brightness(1.05);
 }
 
 .kiosk-touch-button:active {
@@ -411,9 +506,14 @@ document.addEventListener('DOMContentLoaded', function() {
       $bgColor = 'bg-red-500/5';
       $iconColor = 'text-red-400';
       $statusText = 'Ocupada';
+      $statusHint = 'Orden activa';
       $btnText = 'Ver POS';
-      $btnColor = 'from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700';
       $btnIcon = 'bi-eye';
+      $btnStyle = 'background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);';
+      $pillClass = 'bg-rose-500/15 text-rose-100 border-rose-400/30';
+      $cardClass = 'mesa-card-ocupada';
+      $accentClass = 'bg-gradient-to-br from-red-500 to-pink-600';
+      $detailTextClass = 'text-red-300';
     } else {
       $estado = 'libre';
       $statusColor = 'from-green-500 to-emerald-600';
@@ -421,83 +521,102 @@ document.addEventListener('DOMContentLoaded', function() {
       $bgColor = 'bg-green-500/5';
       $iconColor = 'text-green-400';
       $statusText = 'Disponible';
+      $statusHint = 'Sin orden activa';
       $btnText = 'Abrir POS';
-      $btnColor = 'from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700';
       $btnIcon = 'bi-arrow-right-circle';
+      $btnStyle = 'background: linear-gradient(135deg, #10b981 0%, #059669 100%);';
+      $pillClass = 'bg-emerald-500/15 text-emerald-100 border-emerald-400/30';
+      $cardClass = 'mesa-card-libre';
+      $accentClass = 'bg-gradient-to-br from-emerald-500 to-cyan-600';
+      $detailTextClass = 'text-emerald-300';
     }
   ?>
     <!-- Mesa Card - Kiosk -->
-        <div class="kiosk-mesa-card group">
-          <div class="bg-dark-700/40 backdrop-blur-xl rounded-2xl border <?= $borderColor ?> p-6 h-full flex flex-col justify-between shadow-xl <?= $bgColor ?>">
-
-        <!-- Mesa Header -->
-        <div class="flex items-center justify-between mb-4">
+    <div class="kiosk-mesa-card group">
+      <div class="mesa-card-shell <?= $cardClass ?>">
+        <div class="flex items-start justify-between mb-4 relative z-10">
           <div class="flex items-center space-x-3">
-            <div class="w-14 h-14 bg-gradient-to-br <?= $statusColor ?> rounded-xl flex items-center justify-center shadow-lg">
+            <div class="w-14 h-14 <?= $accentClass ?> rounded-2xl flex items-center justify-center shadow-lg">
               <i class="bi bi-table text-white text-2xl"></i>
             </div>
             <div>
+              <p class="text-[11px] uppercase tracking-[0.3em] text-gray-400 mb-1">Mesa</p>
               <h3 class="text-xl font-bold text-white group-hover:text-blue-400 transition-colors">
                 <?= htmlspecialchars($mesa['nombre']) ?>
               </h3>
-              <p class="text-sm text-gray-400">Mesa</p>
             </div>
           </div>
 
-          <!-- Status Badge -->
-          <div class="flex flex-col items-end">
-            <span class="inline-flex items-center px-4 py-2 rounded-full text-sm font-bold bg-gradient-to-r <?= $statusColor ?> text-white shadow-lg">
-              <div class="w-2.5 h-2.5 bg-white rounded-full mr-2 animate-pulse"></div>
-              <?= $statusText ?>
-            </span>
-          </div>
+          <span class="mesa-card-pill <?= $pillClass ?>">
+            <span class="w-2.5 h-2.5 rounded-full bg-white/90"></span>
+            <?= $statusText ?>
+          </span>
         </div>
 
-        <!-- Mesa Description -->
         <?php if (!empty($mesa['descripcion'])): ?>
-          <div class="mb-4">
-            <p class="text-gray-300 text-sm">
-              <i class="bi bi-info-circle <?= $iconColor ?> mr-2"></i>
-              <?= htmlspecialchars($mesa['descripcion']) ?>
-            </p>
+          <div class="mesa-card-description">
+            <i class="bi bi-info-circle <?= $iconColor ?>"></i>
+            <span><?= htmlspecialchars($mesa['descripcion']) ?></span>
+          </div>
+        <?php else: ?>
+          <div class="mesa-card-description mesa-card-description-muted">
+            <i class="bi bi-info-circle <?= $iconColor ?>"></i>
+            <span><?= $mesa['orden_abierta'] > 0 ? 'Orden abierta con información activa' : 'Sin observaciones registradas' ?></span>
           </div>
         <?php endif; ?>
 
-        <!-- Mesa Stats -->
-        <div class="mb-6">
-          <div class="flex items-center justify-between text-base">
-            <span class="text-gray-400">Estado:</span>
+        <div class="mesa-card-info-list relative z-10">
+          <div class="mesa-card-info-item">
+            <span class="mesa-card-info-label">
+              <i class="bi bi-circle-fill mr-2"></i>
+              Estado
+            </span>
             <span class="<?= $iconColor ?> font-semibold"><?= $statusText ?></span>
           </div>
+
           <?php if ($mesa['orden_abierta'] > 0): ?>
-            <div class="flex items-center justify-between text-base mt-2">
-              <span class="text-gray-400">Total de la Orden:</span>
-              <span class="text-red-400 font-bold text-lg">$<?= $mesa['orden_total'] ?></span>
+            <div class="mesa-card-info-item">
+              <span class="mesa-card-info-label">
+                <i class="bi bi-cash-stack mr-2"></i>
+                Total
+              </span>
+              <span class="<?= $detailTextClass ?> font-semibold">$<?= $mesa['orden_total'] ?></span>
             </div>
             <?php if (!empty($mesa['mesero_nombre']) && trim($mesa['mesero_nombre']) !== ''): ?>
-            <div class="flex items-center justify-between text-base mt-2">
-              <span class="text-gray-400">Mesero:</span>
-              <span class="text-blue-400 font-semibold flex items-center">
-                <i class="bi bi-person-badge text-base mr-1"></i>
+            <div class="mesa-card-info-item">
+              <span class="mesa-card-info-label">
+                <i class="bi bi-person-badge mr-2"></i>
+                Mesero
+              </span>
+              <span class="text-blue-300 font-semibold flex items-center">
                 <?= htmlspecialchars(trim($mesa['mesero_nombre'])) ?>
               </span>
             </div>
             <?php endif; ?>
+          <?php else: ?>
+            <div class="mesa-card-info-item">
+              <span class="mesa-card-info-label">
+                <i class="bi bi-check-circle mr-2"></i>
+                Disponibilidad
+              </span>
+              <span class="<?= $detailTextClass ?> font-semibold">Lista para abrir</span>
+            </div>
           <?php endif; ?>
         </div>
 
-        <!-- Action Buttons - Touch Optimized -->
-        <div class="mt-auto space-y-2">
+        <div class="mt-auto pt-2 space-y-2 relative z-10">
           <a href="index.php?page=mesa&id=<?= $mesa['id'] ?>"
-            class="kiosk-touch-button block w-full text-center bg-gradient-to-r <?= $btnColor ?> text-white rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl">
-            <i class="bi <?= $btnIcon ?> mr-2 text-lg"></i>
+            class="kiosk-touch-button w-full"
+            style="<?= $btnStyle ?>">
+            <i class="bi <?= $btnIcon ?> text-lg"></i>
             <?= $btnText ?>
           </a>
-          
+
           <?php if ($mesa['orden_abierta'] > 0 && isset($mesa['orden_id'])): ?>
-          <button onclick="event.stopPropagation(); event.preventDefault(); imprimirTicketTermico(<?= $mesa['orden_id'] ?>)" 
-            class="kiosk-touch-button block w-full text-center bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl">
-            <i class="bi bi-receipt mr-2 text-lg"></i>
+          <button onclick="event.stopPropagation(); event.preventDefault(); imprimirTicketTermico(<?= $mesa['orden_id'] ?>)"
+            class="kiosk-touch-button w-full"
+            style="background: linear-gradient(135deg, #8b5cf6 0%, #4f46e5 100%);">
+            <i class="bi bi-receipt text-lg"></i>
             Térmica
           </button>
           <?php endif; ?>

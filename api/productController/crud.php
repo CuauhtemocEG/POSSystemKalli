@@ -260,6 +260,8 @@ function guardarVariedades($pdo, $productoId, $variedades) {
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 
 try {
+    $categoriasPermitidas = ['comidas', 'bebidas', 'desayunos'];
+
     switch ($action) {
         case 'add':
             // Validate required fields
@@ -267,6 +269,7 @@ try {
             $precio = floatval($_POST['precio'] ?? 0);
             $descripcion = trim($_POST['descripcion'] ?? '');
             $type = intval($_POST['type'] ?? 0);
+            $categoria = trim(strtolower($_POST['categoria'] ?? 'comidas'));
             $tiene_variedades = intval($_POST['tiene_variedades'] ?? 0);
 
             if (empty($nombre)) {
@@ -278,6 +281,9 @@ try {
             if ($type <= 0) {
                 throw new Exception('Debe seleccionar una categoría válida');
             }
+            if (!in_array($categoria, $categoriasPermitidas, true)) {
+                throw new Exception('Debe seleccionar una categoría operativa válida');
+            }
 
             // Handle image upload
             $imagen = null;
@@ -286,9 +292,9 @@ try {
             }
 
             // Insert product
-            $sql = "INSERT INTO productos (nombre, precio, descripcion, imagen, type, categoria, tiene_variedades) VALUES (?, ?, ?, ?, ?, 'comidas', ?)";
+            $sql = "INSERT INTO productos (nombre, precio, descripcion, imagen, type, categoria, tiene_variedades) VALUES (?, ?, ?, ?, ?, ?, ?)";
             $stmt = $pdo->prepare($sql);
-            $success = $stmt->execute([$nombre, $precio, $descripcion, $imagen, $type, $tiene_variedades]);
+            $success = $stmt->execute([$nombre, $precio, $descripcion, $imagen, $type, $categoria, $tiene_variedades]);
 
             if ($success) {
                 $productoId = $pdo->lastInsertId();
@@ -314,6 +320,7 @@ try {
             $precio = floatval($_POST['precio'] ?? 0);
             $descripcion = trim($_POST['descripcion'] ?? '');
             $type = intval($_POST['type'] ?? 0);
+            $categoria = trim(strtolower($_POST['categoria'] ?? 'comidas'));
             $tiene_variedades = intval($_POST['tiene_variedades'] ?? 0);
 
             if (!$id) {
@@ -327,6 +334,9 @@ try {
             }
             if ($type <= 0) {
                 throw new Exception('Debe seleccionar una categoría válida');
+            }
+            if (!in_array($categoria, $categoriasPermitidas, true)) {
+                throw new Exception('Debe seleccionar una categoría operativa válida');
             }
 
             // Get current product data
@@ -350,9 +360,9 @@ try {
             }
 
             // Update product
-            $sql = "UPDATE productos SET nombre = ?, precio = ?, descripcion = ?, imagen = ?, type = ?, tiene_variedades = ? WHERE id = ?";
+            $sql = "UPDATE productos SET nombre = ?, precio = ?, descripcion = ?, imagen = ?, type = ?, categoria = ?, tiene_variedades = ? WHERE id = ?";
             $stmt = $pdo->prepare($sql);
-            $success = $stmt->execute([$nombre, $precio, $descripcion, $imagen, $type, $tiene_variedades, $id]);
+            $success = $stmt->execute([$nombre, $precio, $descripcion, $imagen, $type, $categoria, $tiene_variedades, $id]);
 
             if ($success) {
                 // Actualizar variedades

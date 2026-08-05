@@ -1,7 +1,7 @@
 <div class="view-wide pt-20">
 <!-- Incluir sistema de notificaciones de sonido -->
 <script src="js/notification-sound.js"></script>
-<!-- Custom Styles for Enhanced Bar View -->
+<!-- Custom Styles for Enhanced Breakfast View -->
 <style>
   @keyframes slideInUp {
     from {
@@ -38,9 +38,9 @@
   }
   
   .product-item:hover {
-    background: rgba(59, 130, 246, 0.15);
+    background: rgba(16, 185, 129, 0.15);
     transform: translateX(2px);
-    border-color: rgba(59, 130, 246, 0.5);
+    border-color: rgba(16, 185, 129, 0.5);
   }
   
   .status-badge {
@@ -89,14 +89,14 @@
     }
   }
   
-  #nuevas-ordenes-alert-bar {
+  #nuevas-ordenes-alert-desayunos {
     animation: slide-in-right 0.5s ease-out;
     cursor: pointer;
     transition: all 0.3s ease;
   }
   
-  #nuevas-ordenes-alert-bar:hover {
-    background: rgba(59, 130, 246, 0.3);
+  #nuevas-ordenes-alert-desayunos:hover {
+    background: rgba(16, 185, 129, 0.3);
     transform: scale(1.05);
   }
   
@@ -109,57 +109,57 @@
     }
   }
   
-  #nuevas-ordenes-badge-bar {
+  #nuevas-ordenes-badge-desayunos {
     animation: pulse-scale 1s infinite;
   }
 </style>
 
-<!-- Bar Status Cards - Compact Version -->
+<!-- Breakfast Status Cards - Compact Version -->
 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-  <div class="bg-gradient-to-br from-sky-500/10 to-blue-600/5 backdrop-blur-sm rounded-xl border border-sky-500/20 p-4">
+  <div class="bg-gradient-to-br from-emerald-500/10 to-lime-600/5 backdrop-blur-sm rounded-xl border border-emerald-500/20 p-4">
     <div class="flex items-center justify-between">
       <div>
-        <p class="text-sky-400 text-xs font-medium mb-1">Pendientes</p>
-        <h3 class="text-2xl font-bold text-white" id="bebidas-pendientes">0</h3>
-      </div>
-      <div class="w-10 h-10 bg-sky-500/20 rounded-lg flex items-center justify-center">
-        <i class="bi bi-clock text-sky-400"></i>
-      </div>
-    </div>
-  </div>
-  
-  <div class="bg-gradient-to-br from-blue-500/10 to-cyan-600/5 backdrop-blur-sm rounded-xl border border-blue-500/20 p-4">
-    <div class="flex items-center justify-between">
-      <div>
-        <p class="text-blue-400 text-xs font-medium mb-1">Preparando</p>
-        <h3 class="text-2xl font-bold text-white" id="bebidas-preparando">0</h3>
-      </div>
-      <div class="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center">
-        <i class="bi bi-hourglass-split text-blue-400"></i>
-      </div>
-    </div>
-  </div>
-  
-  <div class="bg-gradient-to-br from-emerald-500/10 to-green-600/5 backdrop-blur-sm rounded-xl border border-emerald-500/20 p-4">
-    <div class="flex items-center justify-between">
-      <div>
-        <p class="text-emerald-400 text-xs font-medium mb-1">Listas</p>
-        <h3 class="text-2xl font-bold text-white" id="bebidas-listas">0</h3>
+        <p class="text-emerald-400 text-xs font-medium mb-1">Pendientes</p>
+        <h3 class="text-2xl font-bold text-white" id="desayunos-pendientes">0</h3>
       </div>
       <div class="w-10 h-10 bg-emerald-500/20 rounded-lg flex items-center justify-center">
-        <i class="bi bi-check-circle text-emerald-400"></i>
+        <i class="bi bi-clock text-emerald-400"></i>
       </div>
     </div>
   </div>
   
-  <div class="bg-gradient-to-br from-violet-500/10 to-fuchsia-600/5 backdrop-blur-sm rounded-xl border border-violet-500/20 p-4">
+  <div class="bg-gradient-to-br from-lime-500/10 to-green-600/5 backdrop-blur-sm rounded-xl border border-lime-500/20 p-4">
     <div class="flex items-center justify-between">
       <div>
-        <p class="text-violet-400 text-xs font-medium mb-1">Mesas</p>
-        <h3 class="text-2xl font-bold text-white" id="mesas-activas-bar">0</h3>
+        <p class="text-lime-400 text-xs font-medium mb-1">Preparando</p>
+        <h3 class="text-2xl font-bold text-white" id="desayunos-preparando">0</h3>
       </div>
-      <div class="w-10 h-10 bg-violet-500/20 rounded-lg flex items-center justify-center">
-        <i class="bi bi-grid-3x3 text-violet-400"></i>
+      <div class="w-10 h-10 bg-lime-500/20 rounded-lg flex items-center justify-center">
+        <i class="bi bi-hourglass-split text-lime-400"></i>
+      </div>
+    </div>
+  </div>
+  
+  <div class="bg-gradient-to-br from-green-500/10 to-emerald-600/5 backdrop-blur-sm rounded-xl border border-green-500/20 p-4">
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="text-green-400 text-xs font-medium mb-1">Listas</p>
+        <h3 class="text-2xl font-bold text-white" id="desayunos-listas">0</h3>
+      </div>
+      <div class="w-10 h-10 bg-green-500/20 rounded-lg flex items-center justify-center">
+        <i class="bi bi-check-circle text-green-400"></i>
+      </div>
+    </div>
+  </div>
+  
+  <div class="bg-gradient-to-br from-teal-500/10 to-cyan-600/5 backdrop-blur-sm rounded-xl border border-teal-500/20 p-4">
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="text-teal-400 text-xs font-medium mb-1">Mesas</p>
+        <h3 class="text-2xl font-bold text-white" id="mesas-activas-desayunos">0</h3>
+      </div>
+      <div class="w-10 h-10 bg-teal-500/20 rounded-lg flex items-center justify-center">
+        <i class="bi bi-grid-3x3 text-teal-400"></i>
       </div>
     </div>
   </div>
@@ -170,26 +170,26 @@
   <div class="bg-dark-700/20 backdrop-blur-sm rounded-xl border border-dark-600/30 p-4">
     <div class="flex items-center justify-between flex-wrap gap-3">
       <div class="flex items-center space-x-3">
-        <div class="w-8 h-8 bg-gradient-to-br from-sky-500 to-blue-600 rounded-lg flex items-center justify-center relative">
+        <div class="w-8 h-8 bg-gradient-to-br from-emerald-500 to-green-600 rounded-lg flex items-center justify-center relative">
           <i class="bi bi-arrow-clockwise text-white text-sm"></i>
-          <span id="nuevas-ordenes-badge-bar" class="hidden absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center animate-bounce">0</span>
+          <span id="nuevas-ordenes-badge-desayunos" class="hidden absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center animate-bounce">0</span>
         </div>
         <div>
           <h3 class="text-sm font-semibold text-white">Auto-actualización</h3>
-          <p class="text-gray-400 text-xs">Cada <span id="refresh-interval-display-bar">30</span> segundos</p>
+          <p class="text-gray-400 text-xs">Cada <span id="refresh-interval-display-desayunos">30</span> segundos</p>
         </div>
       </div>
       <div class="flex items-center space-x-3">
-        <div id="nuevas-ordenes-alert-bar" class="hidden items-center space-x-2 bg-sky-500/20 border border-sky-500/50 px-3 py-1 rounded-lg animate-pulse">
-          <i class="bi bi-bell-fill text-sky-400"></i>
-          <span class="text-sky-400 text-xs font-bold">¡<span id="contador-nuevas-bar">0</span> NUEVA(S) ORDEN(ES)!</span>
+        <div id="nuevas-ordenes-alert-desayunos" class="hidden items-center space-x-2 bg-emerald-500/20 border border-emerald-500/50 px-3 py-1 rounded-lg animate-pulse">
+          <i class="bi bi-bell-fill text-emerald-400"></i>
+          <span class="text-emerald-400 text-xs font-bold">¡<span id="contador-nuevas-desayunos">0</span> NUEVA(S) ORDEN(ES)!</span>
         </div>
         <div class="flex items-center space-x-2">
-          <div class="w-2 h-2 bg-sky-500 rounded-full animate-pulse"></div>
-          <span class="text-sky-400 text-xs font-medium">En línea</span>
+          <div class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+          <span class="text-emerald-400 text-xs font-medium">En línea</span>
         </div>
-        <button onclick="cargarBar(true)" 
-                class="px-4 py-2 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-semibold rounded-lg transition-all duration-200 transform hover:scale-105 text-sm shadow-lg">
+        <button onclick="cargarDesayunos()" 
+                class="px-4 py-2 bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white font-semibold rounded-lg transition-all duration-200 transform hover:scale-105 text-sm shadow-lg">
           <i class="bi bi-arrow-clockwise mr-1"></i>
           Actualizar
         </button>
@@ -198,43 +198,43 @@
   </div>
 </div>
 
-<!-- Bar Orders Content -->
-<div id="bar-content">
+<!-- Breakfast Orders Content -->
+<div id="desayunos-content">
   <!-- Loading State -->
   <div class="bg-dark-700/30 backdrop-blur-xl rounded-2xl border border-dark-600/50 p-12 text-center">
-    <div class="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-sky-500/20 to-blue-600/20 rounded-2xl mb-4">
-      <i class="bi bi-arrow-clockwise text-sky-400 text-2xl animate-spin"></i>
+    <div class="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-emerald-500/20 to-green-600/20 rounded-2xl mb-4">
+      <i class="bi bi-arrow-clockwise text-emerald-400 text-2xl animate-spin"></i>
     </div>
-    <h3 class="text-xl font-semibold text-white mb-2">Cargando Vista de Bar</h3>
-    <p class="text-gray-400">Obteniendo órdenes de bebidas...</p>
+    <h3 class="text-xl font-semibold text-white mb-2">Cargando Vista de Desayunos</h3>
+    <p class="text-gray-400">Obteniendo órdenes de desayunos...</p>
   </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
-let refreshIntervalBar;
-let isUpdatingBar = false;
+let refreshIntervalDesayunos;
+let isUpdatingDesayunos = false;
 
-function cargarBar(showLoading = true) {
+function cargarDesayunos(showLoading = true) {
   // Evitar múltiples actualizaciones simultáneas
-  if (isUpdatingBar) return;
-  isUpdatingBar = true;
+  if (isUpdatingDesayunos) return;
+  isUpdatingDesayunos = true;
 
   // Solo mostrar loading en la primera carga o actualización manual
   if (showLoading) {
-    document.getElementById('bar-content').innerHTML = `
+    document.getElementById('desayunos-content').innerHTML = `
       <div class="flex items-center justify-center py-20">
         <div class="text-center">
           <div class="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-cyan-500/20 to-blue-600/20 rounded-2xl mb-4">
             <i class="bi bi-arrow-clockwise text-cyan-400 text-2xl animate-spin"></i>
           </div>
-          <p class="text-gray-400">Cargando bebidas...</p>
+          <p class="text-gray-400">Cargando desayunos...</p>
         </div>
       </div>
     `;
   }
 
-  fetch('controllers/bar_ajax.php?_=' + Date.now()) // Anti-cache timestamp
+  fetch('controllers/desayunos_ajax.php?_=' + Date.now()) // Anti-cache timestamp
     .then(res => res.json())
     .then(data => {
       // Separar productos normales y pendientes de cancelación
@@ -270,10 +270,10 @@ function cargarBar(showLoading = true) {
       });
 
       // Update stats
-      document.getElementById('bebidas-pendientes').textContent = stats.pendientes;
-      document.getElementById('bebidas-preparando').textContent = stats.preparando;
-      document.getElementById('bebidas-listas').textContent = stats.listas;
-      document.getElementById('mesas-activas-bar').textContent = stats.mesasActivas;
+      document.getElementById('desayunos-pendientes').textContent = stats.pendientes;
+      document.getElementById('desayunos-preparando').textContent = stats.preparando;
+      document.getElementById('desayunos-listas').textContent = stats.listas;
+      document.getElementById('mesas-activas-desayunos').textContent = stats.mesasActivas;
 
       // Render orders
       let html = '';
@@ -286,7 +286,7 @@ function cargarBar(showLoading = true) {
                 <i class="bi bi-check-circle text-green-400 text-3xl"></i>
               </div>
               <h3 class="text-xl font-semibold text-white mb-2">¡Todo al día!</h3>
-              <p class="text-gray-400">No hay órdenes de bebidas pendientes</p>
+              <p class="text-gray-400">No hay órdenes de desayunos pendientes</p>
             </div>
           </div>
         `;
@@ -335,7 +335,7 @@ function cargarBar(showLoading = true) {
             totalProductos += parseInt(item.cantidad) - parseInt(item.cancelado);
           });
           
-          let statusColor = 'sky';
+          let statusColor = 'emerald';
           let statusText = 'Pendiente';
           let statusIcon = 'clock';
           
@@ -344,7 +344,7 @@ function cargarBar(showLoading = true) {
             statusText = 'Completa';
             statusIcon = 'check-circle-fill';
           } else if (totalPreparado > 0) {
-            statusColor = 'blue';
+            statusColor = 'lime';
             statusText = 'En Preparación';
             statusIcon = 'hourglass-split';
           }
@@ -370,10 +370,10 @@ function cargarBar(showLoading = true) {
                     <div class="flex items-center gap-4">
                       <div class="flex items-center gap-4">
                         <span class="text-sm text-gray-300 font-medium">
-                          <i class="bi bi-cup-straw mr-1.5"></i>${totalProductos} bebidas
+                          <i class="bi bi-egg-fried mr-1.5"></i>${totalProductos} productos
                         </span>
                         ${totalPreparado > 0 ? `<span class="text-sm text-green-400 font-semibold"><i class="bi bi-check-lg mr-1.5"></i>${totalPreparado} listos</span>` : ''}
-                        ${totalFaltan > 0 ? `<span class="text-sm text-sky-400 font-semibold animate-pulse"><i class="bi bi-clock mr-1.5"></i>${totalFaltan} pendientes</span>` : ''}
+                        ${totalFaltan > 0 ? `<span class="text-sm text-emerald-400 font-semibold animate-pulse"><i class="bi bi-clock mr-1.5"></i>${totalFaltan} pendientes</span>` : ''}
                       </div>
                       
                       <div class="status-badge px-4 py-2 bg-${statusColor}-500/20 border border-${statusColor}-500/30 rounded-full">
@@ -397,24 +397,24 @@ function cargarBar(showLoading = true) {
             const cancelado = parseInt(item.cancelado);
             
             html += `
-              <div class="product-item bg-gradient-to-br from-dark-600/50 to-dark-700/30 rounded-xl p-4 border border-dark-500/40 hover:border-sky-500/40 transition-all duration-200">
+              <div class="product-item bg-gradient-to-br from-dark-600/50 to-dark-700/30 rounded-xl p-4 border border-dark-500/40 hover:border-emerald-500/40 transition-all duration-200">
                 <div class="flex items-start justify-between mb-3">
                   <div class="flex items-start space-x-3 flex-1">
-                    <div class="w-12 h-12 bg-gradient-to-br from-sky-500/30 to-blue-600/30 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg">
-                      <i class="bi bi-cup-straw text-sky-400 text-lg"></i>
+                    <div class="w-12 h-12 bg-gradient-to-br from-emerald-500/30 to-green-600/30 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg">
+                      <i class="bi bi-egg-fried text-emerald-400 text-lg"></i>
                     </div>
                     <div class="flex-1 min-w-0">
                       <p class="text-white font-semibold text-base leading-tight mb-2">${item.producto}</p>
                       
                       ${item.variedades && item.variedades.length > 0 ? `
-                        <div class="mt-2 mb-2 pl-3 border-l-2 border-sky-500/50 bg-sky-500/5 rounded-r py-2 pr-2">
-                          <p class="text-xs text-sky-400 font-bold mb-1.5 uppercase tracking-wide flex items-center">
+                        <div class="mt-2 mb-2 pl-3 border-l-2 border-emerald-500/50 bg-emerald-500/5 rounded-r py-2 pr-2">
+                          <p class="text-xs text-emerald-400 font-bold mb-1.5 uppercase tracking-wide flex items-center">
                             <i class="bi bi-list-ul mr-1"></i>Especificaciones:
                           </p>
                           ${item.variedades.map(v => `
-                            <div class="text-sm text-sky-200 mb-1 flex items-start">
-                              <i class="bi bi-chevron-right text-sky-400 mr-1 mt-0.5"></i>
-                              <span><span class="font-semibold text-sky-300">${v.grupo_nombre}:</span> ${v.opcion_nombre}</span>
+                            <div class="text-sm text-emerald-200 mb-1 flex items-start">
+                              <i class="bi bi-chevron-right text-emerald-400 mr-1 mt-0.5"></i>
+                              <span><span class="font-semibold text-emerald-300">${v.grupo_nombre}:</span> ${v.opcion_nombre}</span>
                             </div>
                           `).join('')}
                         </div>
@@ -444,7 +444,7 @@ function cargarBar(showLoading = true) {
                           </span>
                         ` : ''}
                         ${faltan > 0 ? `
-                          <span class="inline-flex items-center px-3 py-1.5 bg-sky-500/30 border border-sky-500/50 text-sky-200 rounded-lg text-sm font-bold shadow-sm animate-pulse">
+                          <span class="inline-flex items-center px-3 py-1.5 bg-emerald-500/30 border border-emerald-500/50 text-emerald-200 rounded-lg text-sm font-bold shadow-sm animate-pulse">
                             <i class="bi bi-clock-fill mr-1.5"></i>Pendientes: ${faltan}
                           </span>
                         ` : ''}
@@ -454,7 +454,7 @@ function cargarBar(showLoading = true) {
                 </div>
                 
                 ${faltan > 0 ? `
-                  <form class="marcar-preparado-form-bar mt-3 pt-3 border-t border-dark-500/40" data-op="${item.op_id}">
+                  <form class="marcar-preparado-form-desayunos mt-3 pt-3 border-t border-dark-500/40" data-op="${item.op_id}">
                     <div class="flex items-center space-x-3">
                       <div class="flex items-center space-x-2">
                         <label class="text-xs text-gray-400 font-semibold">Cantidad:</label>
@@ -463,10 +463,10 @@ function cargarBar(showLoading = true) {
                                value="${Math.min(faltan, 1)}" 
                                min="1" 
                                max="${faltan}" 
-                               class="w-20 px-3 py-2 bg-dark-700/70 border border-dark-500/50 rounded-lg text-white text-base font-semibold text-center focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent transition-all">
+                               class="w-20 px-3 py-2 bg-dark-700/70 border border-dark-500/50 rounded-lg text-white text-base font-semibold text-center focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all">
                       </div>
                       <button type="submit" 
-                              class="flex-1 px-4 py-2.5 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-bold rounded-lg transition-all duration-200 transform hover:scale-105 text-sm shadow-lg hover:shadow-xl">
+                              class="flex-1 px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white font-bold rounded-lg transition-all duration-200 transform hover:scale-105 text-sm shadow-lg hover:shadow-xl">
                         <i class="bi bi-check2-circle mr-2"></i>
                         Marcar como Listo
                       </button>
@@ -494,7 +494,7 @@ function cargarBar(showLoading = true) {
         html += '</div>';
       }
 
-      document.getElementById('bar-content').innerHTML = html;
+      document.getElementById('desayunos-content').innerHTML = html;
 
       // Verificar y notificar nuevos productos
       if (window.notificationSound) {
@@ -513,7 +513,7 @@ function cargarBar(showLoading = true) {
       }
 
       // Add event listeners
-      document.querySelectorAll('.marcar-preparado-form-bar').forEach(form => {
+      document.querySelectorAll('.marcar-preparado-form-desayunos').forEach(form => {
         form.addEventListener('submit', function(e) {
           e.preventDefault();
           const op_id = this.getAttribute('data-op');
@@ -548,28 +548,28 @@ function cargarBar(showLoading = true) {
               
               toast.fire({
                 icon: 'success',
-                title: 'Bebida marcada como lista',
+                title: 'Producto marcado como listo',
                 background: '#1f2937',
                 color: '#ffffff'
               });
               
               // Forzar actualización inmediata sin loading
-              isUpdatingBar = false; // Reset flag antes de actualizar
+              isUpdatingDesayunos = false; // Reset flag antes de actualizar
               
               // Dar tiempo para que la BD confirme el commit
               setTimeout(() => {
-                console.log('🔄 Actualizando vista de bar...');
+                console.log('🔄 Actualizando vista de desayunos...');
                 // Agregar timestamp para evitar caché
-                fetch('controllers/bar_ajax.php?_=' + Date.now())
+                fetch('controllers/desayunos_ajax.php?_=' + Date.now())
                   .then(res => res.json())
                   .then(data => {
                     console.log('✅ Datos actualizados:', data.length, 'items');
-                    // Llamar a cargarBar con los datos frescos
-                    cargarBar(false);
+                    // Llamar a cargarDesayunos con los datos frescos
+                    cargarDesayunos(false);
                   })
                   .catch(err => {
                     console.error('❌ Error al actualizar:', err);
-                    cargarBar(false);
+                    cargarDesayunos(false);
                   });
               }, 300);
             } else {
@@ -603,24 +603,24 @@ function cargarBar(showLoading = true) {
 
       // Show cancellation alerts if any
       if (productosPendientes.length > 0) {
-        mostrarAlertaCancelacionesBar(productosPendientes);
+        mostrarAlertaCancelacionesDesayunos(productosPendientes);
       }
 
       // Marcar actualización como completada
-      isUpdatingBar = false;
+      isUpdatingDesayunos = false;
     })
     .catch(error => {
       console.error('Error:', error);
-      isUpdatingBar = false;
-      document.getElementById('bar-content').innerHTML = `
+      isUpdatingDesayunos = false;
+      document.getElementById('desayunos-content').innerHTML = `
         <div class="flex items-center justify-center py-20">
           <div class="text-center">
             <div class="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-red-500/20 to-pink-600/20 rounded-2xl mb-4">
               <i class="bi bi-exclamation-triangle text-red-400 text-2xl"></i>
             </div>
             <h3 class="text-xl font-semibold text-white mb-2">Error al cargar datos</h3>
-            <p class="text-gray-400 mb-4">No se pudieron obtener las órdenes de bar</p>
-            <button onclick="cargarBar()" class="px-4 py-2 bg-cyan-500 text-white rounded-xl hover:bg-cyan-600 transition-colors">
+            <p class="text-gray-400 mb-4">No se pudieron obtener las órdenes de desayunos</p>
+            <button onclick="cargarDesayunos()" class="px-4 py-2 bg-cyan-500 text-white rounded-xl hover:bg-cyan-600 transition-colors">
               <i class="bi bi-arrow-clockwise mr-2"></i>
               Reintentar
             </button>
@@ -630,7 +630,7 @@ function cargarBar(showLoading = true) {
     });
 }
 
-function mostrarAlertaCancelacionesBar(productos) {
+function mostrarAlertaCancelacionesDesayunos(productos) {
   if (productos.length === 0) return;
   
   let html = '<div class="text-left space-y-2 max-h-96 overflow-y-auto">';
@@ -661,36 +661,36 @@ function mostrarAlertaCancelacionesBar(productos) {
     confirmButtonColor: '#dc2626',
     width: '500px',
     customClass: {
-      container: 'swal-cancelaciones-bar'
+      container: 'swal-cancelaciones-desayunos'
     }
   });
 }
 
 // Auto refresh every 30 seconds
-function startAutoRefreshBar() {
-  refreshIntervalBar = setInterval(() => {
-    cargarBar(false); // Actualización automática sin loading
+function startAutoRefreshDesayunos() {
+  refreshIntervalDesayunos = setInterval(() => {
+    cargarDesayunos(false); // Actualización automática sin loading
   }, 30000);
 }
 
-function stopAutoRefreshBar() {
-  if (refreshIntervalBar) {
-    clearInterval(refreshIntervalBar);
+function stopAutoRefreshDesayunos() {
+  if (refreshIntervalDesayunos) {
+    clearInterval(refreshIntervalDesayunos);
   }
 }
 
 // Load data when page loads
 document.addEventListener('DOMContentLoaded', function() {
-  cargarBar();
-  startAutoRefreshBar();
+  cargarDesayunos();
+  startAutoRefreshDesayunos();
 });
 
 // Stop refresh when page is hidden
 document.addEventListener('visibilitychange', function() {
   if (document.hidden) {
-    stopAutoRefreshBar();
+    stopAutoRefreshDesayunos();
   } else {
-    startAutoRefreshBar();
+    startAutoRefreshDesayunos();
   }
 });
 </script>

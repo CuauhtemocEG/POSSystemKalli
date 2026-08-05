@@ -87,6 +87,7 @@ function hasPermission($module, $action = 'ver') {
             'reportes' => ['ver', 'crear', 'editar', 'eliminar', 'exportar'],
             'cocina' => ['ver', 'crear', 'editar', 'eliminar'],
             'bar' => ['ver', 'crear', 'editar', 'eliminar'],
+            'desayunos' => ['ver', 'crear', 'editar', 'eliminar'],
             'configuracion' => ['ver', 'crear', 'editar', 'eliminar'],
             'promociones' => ['ver', 'crear', 'editar', 'eliminar'],
             'usuarios' => ['ver', 'crear', 'editar', 'eliminar']

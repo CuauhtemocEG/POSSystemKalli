@@ -82,6 +82,14 @@ if (!isset($userInfo) || !$userInfo) {
           </a>
         <?php endif; ?>
 
+        <?php if (hasPermission('desayunos', 'ver')): ?>
+          <a href="index.php?page=desayunos"
+            class="flex items-center px-3 py-2 text-sm font-medium text-gray-300 hover:text-white hover:bg-dark-700/50 rounded-lg transition-all duration-200">
+            <i class="bi bi-egg-fried text-amber-400 mr-2"></i>
+            Desayunos
+          </a>
+        <?php endif; ?>
+
         <!-- 📊 Reportes -->
         <?php if (hasPermission('reportes', 'ver')): ?>
           <a href="index.php?page=reportes"
@@ -192,6 +200,14 @@ if (!isset($userInfo) || !$userInfo) {
           class="flex items-center px-3 py-2 text-base font-medium text-gray-300 hover:text-white hover:bg-dark-700/50 rounded-lg transition-colors">
           <i class="bi bi-cup-straw text-cyan-400 mr-3 w-5"></i>
           Bar
+        </a>
+      <?php endif; ?>
+
+      <?php if (hasPermission('desayunos', 'ver')): ?>
+        <a href="index.php?page=desayunos"
+          class="flex items-center px-3 py-2 text-base font-medium text-gray-300 hover:text-white hover:bg-dark-700/50 rounded-lg transition-colors">
+          <i class="bi bi-egg-fried text-amber-400 mr-3 w-5"></i>
+          Desayunos
         </a>
       <?php endif; ?>
 

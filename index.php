@@ -43,6 +43,11 @@ switch ($page) {
             $page = 'error-403';
         }
         break;
+    case 'desayunos':
+        if (!hasPermission('desayunos', 'ver')) {
+            $page = 'error-403';
+        }
+        break;
     case 'mesas':
         if (!hasPermission('mesas', 'ver')) {
             $page = 'error-403';
@@ -113,6 +118,13 @@ switch ($page) {
     case 'bar':
         if (hasPermission('bar', 'ver')) {
             include 'views/bar.php';
+        } else {
+            include 'views/error-403.php';
+        }
+        break;
+    case 'desayunos':
+        if (hasPermission('desayunos', 'ver')) {
+            include 'views/desayunos.php';
         } else {
             include 'views/error-403.php';
         }
