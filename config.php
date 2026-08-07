@@ -27,15 +27,21 @@ define('JWT_ALGORITHM', 'HS256');
 define('JWT_EXPIRATION_TIME', 8 * 60 * 60); // 8 horas
 define('JWT_REFRESH_TIME', 7 * 24 * 60 * 60); // 7 días para refresh
 
+// Valores por defecto según el sistema operativo (MAMP en macOS usa puertos no estándar;
+// Windows/XAMPP y Linux usualmente usan los puertos estándar 3306/80)
+$esMac = PHP_OS_FAMILY === 'Darwin';
+$dbHostDefault = $esMac ? 'localhost:8889' : 'localhost:3306';
+$appUrlDefault = $esMac ? 'http://localhost:8888/POSSystemKalli' : 'http://localhost/POSSystemKalli';
+
 // Configuración de la Base de Datos
-define('DB_HOST', env('DB_HOST', 'localhost:8889'));
+define('DB_HOST', env('DB_HOST', $dbHostDefault));
 define('DB_NAME', env('DB_NAME', 'kallijaguarpos'));
 define('DB_USER', env('DB_USER', 'root'));
 define('DB_PASS', env('DB_PASS', 'root'));
 
 // Configuración de la Aplicación
 define('APP_NAME', 'Kalli Jaguar POS');
-define('APP_URL', env('APP_URL', 'http://localhost:8888/POSSystemKalli'));
+define('APP_URL', env('APP_URL', $appUrlDefault));
 define('APP_TIMEZONE', env('APP_TIMEZONE', 'America/Mexico_City'));
 
 // Configuración de Sesiones

@@ -58,7 +58,11 @@ try {
             (SELECT o.total 
              FROM ordenes o 
              WHERE o.mesa_id = m.id AND o.estado = 'abierta' 
-             ORDER BY o.id DESC LIMIT 1) as orden_total
+             ORDER BY o.id DESC LIMIT 1) as orden_total,
+            (SELECT o.id 
+             FROM ordenes o 
+             WHERE o.mesa_id = m.id AND o.estado = 'abierta' 
+             ORDER BY o.id DESC LIMIT 1) as orden_id
         FROM mesas m
         ORDER BY m.nombre
     ";
@@ -85,6 +89,7 @@ try {
             'ordenes_abiertas' => $ordenesAbiertas,
             'items_en_orden' => intval($mesa['items_en_orden']),
             'total' => $mesa['orden_total'] !== null ? floatval($mesa['orden_total']) : 0,
+            'orden_id' => $mesa['orden_id'] !== null ? intval($mesa['orden_id']) : null,
             'mesero_nombre' => $mesa['mesero_nombre'] ? trim($mesa['mesero_nombre']) : null
         ];
     }

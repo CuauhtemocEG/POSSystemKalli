@@ -19,29 +19,6 @@ $mesas = $pdo->query("
     ORDER BY m.nombre
 ")->fetchAll(PDO::FETCH_ASSOC);
 
-// Cargar posiciones de layout si existen
-$layout_positions = [];
-try {
-    $layout_query = $pdo->query("
-        SELECT mesa_id, posicion_x, posicion_y, ancho, alto, rotacion, tipo_visual 
-        FROM mesa_layouts 
-        WHERE mesa_id IS NOT NULL
-    ");
-    while ($row = $layout_query->fetch(PDO::FETCH_ASSOC)) {
-        $layout_positions[$row['mesa_id']] = [
-            'posicion_x' => $row['posicion_x'],
-            'posicion_y' => $row['posicion_y'],
-            'ancho' => $row['ancho'],
-            'alto' => $row['alto'],
-            'rotacion' => $row['rotacion'],
-            'tipo_visual' => $row['tipo_visual']
-        ];
-    }
-} catch (Exception $e) {
-    // Si hay error, continuamos sin layout positions
-    $layout_positions = [];
-}
-
 // Obtener configuración de impresión térmica
 include_once 'includes/ConfiguracionSistema.php';
 $config = new ConfiguracionSistema($pdo);
@@ -300,24 +277,6 @@ body, html {
     text-align: center;
 }
 
-/* Layout designer compacto */
-.kiosk-layout-section {
-    margin-top: 2rem;
-}
-
-.kiosk-layout-controls {
-    display: flex;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-}
-
-.kiosk-layout-button {
-    min-height: 44px;
-    padding: 0.75rem 1rem;
-    font-size: 0.875rem;
-    touch-action: manipulation;
-}
-
 /* Optimización para tablets */
 @media (max-width: 1024px) {
     .kiosk-section-header {
@@ -397,22 +356,21 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     <?php if (isset($_GET['success']) && $_GET['success'] === 'orden_cerrada'): ?>
-    // 🔄 Actualización automática cuando se cierra una orden
+    // 🔄 Actualización automática cuando se cierra una orden (sin recargar la página)
     console.log('🔄 Orden cerrada detectada - Actualizando vista de mesas...');
     
-    // Esperar 500ms para que se confirme el guardado en BD
+    // Limpiar URL sin recargar página
+    const url = new URL(window.location);
+    url.searchParams.delete('success');
+    url.searchParams.delete('total');
+    url.searchParams.delete('mesa_id');
+    window.history.replaceState({}, '', url);
+    
+    // Esperar 500ms para que se confirme el guardado en BD y refrescar vía AJAX
     setTimeout(() => {
-        console.log('📡 Recargando estado de mesas con anti-caché...');
-        
-        // Limpiar URL sin recargar página
-        const url = new URL(window.location);
-        url.searchParams.delete('success');
-        url.searchParams.delete('total');
-        url.searchParams.delete('mesa_id');
-        window.history.replaceState({}, '', url);
-        
-        // Recargar página completa con anti-caché
-        window.location.href = 'index.php?page=mesas&_=' + Date.now();
+        if (typeof window.actualizarEstadoMesas === 'function') {
+            window.actualizarEstadoMesas();
+        }
     }, 500);
     <?php endif; ?>
 });
@@ -532,11 +490,17 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   ?>
     <!-- Mesa Card - Kiosk -->
-    <div class="kiosk-mesa-card group">
-      <div class="mesa-card-shell <?= $cardClass ?>">
+    <div class="kiosk-mesa-card group" data-mesa-id="<?= $mesa['id'] ?>" data-mesa-nombre="<?= htmlspecialchars($mesa['nombre']) ?>" data-orden-abierta="<?= $mesa['orden_abierta'] ?>" data-orden-total="<?= $mesa['orden_total'] ?? 0 ?>">
+      <div class="mesa-card-shell <?= $cardClass ?>" id="mesa-card-<?= $mesa['id'] ?>">
+        <button type="button" class="mesa-delete-btn absolute top-3 right-3 z-20 w-8 h-8 rounded-full bg-red-500/80 hover:bg-red-600 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+          title="Eliminar mesa"
+          onclick="event.stopPropagation(); event.preventDefault(); eliminarMesa(this.closest('.kiosk-mesa-card'));"
+          <?= $mesa['orden_abierta'] > 0 ? 'style="display:none;"' : '' ?>>
+          <i class="bi bi-trash text-sm"></i>
+        </button>
         <div class="flex items-start justify-between mb-4 relative z-10">
           <div class="flex items-center space-x-3">
-            <div class="w-14 h-14 <?= $accentClass ?> rounded-2xl flex items-center justify-center shadow-lg">
+            <div class="w-14 h-14 <?= $accentClass ?> rounded-2xl flex items-center justify-center shadow-lg mesa-card-accent">
               <i class="bi bi-table text-white text-2xl"></i>
             </div>
             <div>
@@ -549,7 +513,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
           <span class="mesa-card-pill <?= $pillClass ?>">
             <span class="w-2.5 h-2.5 rounded-full bg-white/90"></span>
-            <?= $statusText ?>
+            <span class="mesa-status-text"><?= $statusText ?></span>
           </span>
         </div>
 
@@ -571,59 +535,53 @@ document.addEventListener('DOMContentLoaded', function() {
               <i class="bi bi-circle-fill mr-2"></i>
               Estado
             </span>
-            <span class="<?= $iconColor ?> font-semibold"><?= $statusText ?></span>
+            <span class="<?= $iconColor ?> font-semibold mesa-estado-valor"><?= $statusText ?></span>
           </div>
 
-          <?php if ($mesa['orden_abierta'] > 0): ?>
-            <div class="mesa-card-info-item">
-              <span class="mesa-card-info-label">
-                <i class="bi bi-cash-stack mr-2"></i>
-                Total
-              </span>
-              <span class="<?= $detailTextClass ?> font-semibold">$<?= $mesa['orden_total'] ?></span>
-            </div>
-            <?php if (!empty($mesa['mesero_nombre']) && trim($mesa['mesero_nombre']) !== ''): ?>
-            <div class="mesa-card-info-item">
-              <span class="mesa-card-info-label">
-                <i class="bi bi-person-badge mr-2"></i>
-                Mesero
-              </span>
-              <span class="text-blue-300 font-semibold flex items-center">
-                <?= htmlspecialchars(trim($mesa['mesero_nombre'])) ?>
-              </span>
-            </div>
-            <?php endif; ?>
-          <?php else: ?>
-            <div class="mesa-card-info-item">
-              <span class="mesa-card-info-label">
-                <i class="bi bi-check-circle mr-2"></i>
-                Disponibilidad
-              </span>
-              <span class="<?= $detailTextClass ?> font-semibold">Lista para abrir</span>
-            </div>
-          <?php endif; ?>
+          <div class="mesa-card-info-item mesa-total-row" <?= $mesa['orden_abierta'] > 0 ? '' : 'style="display:none;"' ?>>
+            <span class="mesa-card-info-label">
+              <i class="bi bi-cash-stack mr-2"></i>
+              Total
+            </span>
+            <span class="<?= $detailTextClass ?> font-semibold mesa-total-valor">$<?= $mesa['orden_total'] ?? '0.00' ?></span>
+          </div>
+          <div class="mesa-card-info-item mesa-mesero-row" <?= (!empty($mesa['mesero_nombre']) && trim($mesa['mesero_nombre']) !== '') ? '' : 'style="display:none;"' ?>>
+            <span class="mesa-card-info-label">
+              <i class="bi bi-person-badge mr-2"></i>
+              Mesero
+            </span>
+            <span class="text-blue-300 font-semibold flex items-center mesa-mesero-valor">
+              <?= htmlspecialchars(trim($mesa['mesero_nombre'] ?? '')) ?>
+            </span>
+          </div>
+          <div class="mesa-card-info-item mesa-disponibilidad-row" <?= $mesa['orden_abierta'] > 0 ? 'style="display:none;"' : '' ?>>
+            <span class="mesa-card-info-label">
+              <i class="bi bi-check-circle mr-2"></i>
+              Disponibilidad
+            </span>
+            <span class="<?= $detailTextClass ?> font-semibold">Lista para abrir</span>
+          </div>
         </div>
 
         <div class="mt-auto pt-2 space-y-2 relative z-10">
           <a href="index.php?page=mesa&id=<?= $mesa['id'] ?>"
-            class="kiosk-touch-button w-full"
+            class="kiosk-touch-button w-full mesa-pos-btn"
             style="<?= $btnStyle ?>">
-            <i class="bi <?= $btnIcon ?> text-lg"></i>
-            <?= $btnText ?>
+            <i class="bi <?= $btnIcon ?> text-lg mesa-pos-btn-icon"></i>
+            <span class="mesa-pos-btn-text"><?= $btnText ?></span>
           </a>
 
-          <?php if ($mesa['orden_abierta'] > 0 && isset($mesa['orden_id'])): ?>
-          <button onclick="event.stopPropagation(); event.preventDefault(); imprimirTicketTermico(<?= $mesa['orden_id'] ?>)"
-            class="kiosk-touch-button w-full"
-            style="background: linear-gradient(135deg, #8b5cf6 0%, #4f46e5 100%);">
+          <button onclick="event.stopPropagation(); event.preventDefault(); imprimirTicketTermico(<?= $mesa['orden_id'] ?? 0 ?>)"
+            class="kiosk-touch-button w-full mesa-thermal-btn"
+            style="background: linear-gradient(135deg, #8b5cf6 0%, #4f46e5 100%); <?= ($mesa['orden_abierta'] > 0 && isset($mesa['orden_id'])) ? '' : 'display:none;' ?>">
             <i class="bi bi-receipt text-lg"></i>
             Térmica
           </button>
-          <?php endif; ?>
         </div>
       </div>
     </div>
   <?php endforeach; ?>
+
 
   <!-- Add New Table Card - Kiosk -->
   <div class="kiosk-mesa-card group cursor-pointer" onclick="document.getElementById('nombreMesa').focus()">
@@ -637,686 +595,10 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
 </div>
 
-<!-- Layout Designer Section - Kiosk -->
-<div class="kiosk-layout-section">
-  <div class="bg-dark-700/30 backdrop-blur-xl rounded-2xl border border-dark-600/50 p-6 shadow-xl">
-    <div class="flex items-center justify-between mb-6 flex-wrap gap-4">
-      <div class="flex items-center">
-        <div class="w-10 h-10 bg-gradient-to-br from-purple-500 to-blue-600 rounded-xl flex items-center justify-center mr-3">
-          <i class="bi bi-grid-3x3-gap text-white text-xl"></i>
-        </div>
-        <div>
-          <h3 class="text-lg font-semibold text-white">Diseñador de Layout</h3>
-          <p class="text-gray-400 text-sm hidden sm:block">Organiza el layout visual de tu restaurante</p>
-        </div>
-      </div>
-      <div class="kiosk-layout-controls">
-        <button id="toggleGrid" class="kiosk-layout-button bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">
-          <i class="bi bi-grid"></i> Grid
-        </button>
-        <button id="saveLayout" class="kiosk-layout-button bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors">
-          <i class="bi bi-save"></i> Guardar
-        </button>
-        <button id="resetLayout" class="kiosk-layout-button bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors">
-          <i class="bi bi-arrow-clockwise"></i> Reset
-        </button>
-      </div>
-    </div>
 
-    <!-- Restaurant Floor -->
-    <div id="restaurantFloor" class="restaurant-floor bg-gray-800 border-2 border-dashed border-gray-600 rounded-xl position-relative" 
-         style="height: 800px; width: 100%; overflow: visible; margin-top: 10px;">
-      
-      
-      <!-- === MESAS DE LA BASE DE DATOS === -->
-      <?php foreach ($mesas as $index => $mesa): ?>
-        <?php
-        // Sistema de posicionamiento con layout guardado
-        $layout = $layout_positions[$mesa['id']] ?? null;
-        $mesaX = $layout ? $layout['posicion_x'] : (300 + ($index % 3) * 150);
-        $mesaY = $layout ? $layout['posicion_y'] : (250 + floor($index / 3) * 120);
-        $mesaWidth = $layout ? $layout['ancho'] : 120;
-        // Altura adaptativa: más alta si tiene mesero asignado
-        $alturaBase = $layout ? $layout['alto'] : 100;
-        $tieneMesero = $mesa['orden_abierta'] > 0 && !empty($mesa['mesero_nombre']) && trim($mesa['mesero_nombre']) !== '';
-        $mesaHeight = $tieneMesero && $alturaBase < 110 ? max($alturaBase, 110) : $alturaBase;
-        $mesaRotation = $layout ? $layout['rotacion'] : 0;
-        
-        $mesaColor = $mesa['orden_abierta'] > 0 ? '#dc2626' : '#16a34a';
-        $mesaEstado = $mesa['orden_abierta'] > 0 ? 'OCUPADA' : 'LIBRE';
-        $mesaBtnText = $mesa['orden_abierta'] > 0 ? 'Ver POS' : 'Abrir POS';
-        $mesaClaseEstado = $mesa['orden_abierta'] > 0 ? 'mesa-ocupada' : 'mesa-libre';
-        ?>
-        
-        <!-- Mesa ID: <?= $mesa['id'] ?> - <?= $mesa['nombre'] ?> -->
-        <div class="mesa-element layout-element <?= $mesaClaseEstado ?>" 
-             id="mesa-<?= $mesa['id'] ?>"
-             data-mesa-id="<?= $mesa['id'] ?>"
-             data-mesa-nombre="<?= htmlspecialchars($mesa['nombre']) ?>"
-             data-orden-abierta="<?= $mesa['orden_abierta'] ?>"
-             data-orden-total="<?= $mesa['orden_total'] ?? 0 ?>"
-             data-rotation="<?= $mesaRotation ?>"
-             style="position: absolute;
-                    left: <?= $mesaX ?>px;
-                    top: <?= $mesaY ?>px;
-                    width: <?= $mesaWidth ?>px;
-                    height: <?= $mesaHeight ?>px;
-                    background: <?= $mesaColor ?>;
-                    border: 3px solid #ffffff;
-                    border-radius: 12px;
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
-                    justify-content: center;
-                    color: white;
-                    font-family: Arial, sans-serif;
-                    font-weight: bold;
-                    cursor: move;
-                    z-index: 500;
-                    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-                    transform: rotate(<?= $mesaRotation ?>deg);
-                    transition: transform 0.2s ease, box-shadow 0.2s ease;">
-          
-          <!-- Botón de eliminar -->
-          <button class="delete-button" title="Eliminar mesa">×</button>
-          
-          <!-- Botón de rotación -->
-          <div class="rotate-handle" title="Rotar mesa">↻</div>
-          
-          <!-- Handles de redimensión -->
-          <div class="resize-handle nw"></div>
-          <div class="resize-handle ne"></div>
-          <div class="resize-handle sw"></div>
-          <div class="resize-handle se"></div>
-          
-          <!-- Contenido de la mesa -->
-          <div class="mesa-content" style="pointer-events: none;">
-            <div style="font-size: 18px; margin-bottom: 4px;">🍽️</div>
-            <div style="font-size: 14px; margin-bottom: 4px;"><?= htmlspecialchars($mesa['nombre']) ?></div>
-            <div style="font-size: 10px; margin-bottom: 6px; opacity: 0.9;"><?= $mesaEstado ?></div>
-            
-            <?php if ($mesa['orden_abierta'] > 0 && !empty($mesa['mesero_nombre']) && trim($mesa['mesero_nombre']) !== ''): ?>
-            <!-- Información del Mesero -->
-            <div style="font-size: 9px; margin-bottom: 6px; opacity: 0.85; display: flex; align-items: center; gap: 2px;">
-              <span style="font-size: 8px;">👤</span>
-              <span>Atiende: <?= htmlspecialchars(trim($mesa['mesero_nombre'])) ?></span>
-            </div>
-            <?php endif; ?>
-            
-            <!-- Botón POS -->
-            <button class="mesa-action-btn bg-white/20 hover:bg-white/30 text-white px-2 py-1 rounded text-xs"
-                    onclick="event.stopPropagation(); window.location='index.php?page=mesa&id=<?= $mesa['id'] ?>&_=' + Date.now();"
-                    style="pointer-events: auto;">
-              <?= $mesaBtnText ?>
-            </button>
-<!-- Recarga automática al volver de la vista de mesa si la orden ya no existe o está cerrada -->
+
 <script>
-document.addEventListener('visibilitychange', function() {
-  if (document.visibilityState === 'visible') {
-    // Al volver a la pestaña, recargar mesas con anti-caché
-    window.location.href = 'index.php?page=mesas&_=' + Date.now();
-  }
-});
-</script>
-
-<!-- SUGERENCIA: Para refresco AJAX en el futuro, puedes crear una función cargarMesas() que haga fetch a un endpoint tipo controllers/mesas_estado.php y actualice el DOM sin recargar toda la página. -->
-          </div>
-          
-          <?php if ($mesa['orden_abierta'] > 0): ?>
-          <!-- Indicador de orden activa -->
-          <div style="position: absolute;
-                      top: -5px;
-                      right: -5px;
-                      width: 20px;
-                      height: 20px;
-                      background: #fbbf24;
-                      border: 2px solid white;
-                      border-radius: 50%;
-                      display: flex;
-                      align-items: center;
-                      justify-content: center;
-                      font-size: 10px;
-                      color: #000;
-                      font-weight: bold;
-                      z-index: 10;">!</div>
-          <?php endif; ?>
-        </div>
-      <?php endforeach; ?>
-    </div>
-  </div>
-</div>
-
-<!-- CSS para el Layout Designer -->
-<style>
-/* Grid system */
-.restaurant-floor {
-  background-image: 
-    linear-gradient(rgba(255,255,255,.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,.05) 1px, transparent 1px);
-  background-size: 20px 20px;
-  user-select: none;
-  position: relative;
-  border: 3px solid #374151 !important;
-  box-shadow: inset 0 0 0 2px #1f2937;
-}
-
-.restaurant-floor::before {
-  content: '';
-  position: absolute;
-  top: 5px;
-  left: 5px;
-  right: 5px;
-  bottom: 5px;
-  border: 1px dashed rgba(59, 130, 246, 0.3);
-  border-radius: 8px;
-  pointer-events: none;
-  z-index: 1;
-}
-
-.restaurant-floor.show-grid {
-  background-image: 
-    linear-gradient(rgba(255,255,255,.1) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,.1) 1px, transparent 1px);
-  background-size: 20px 20px;
-}
-
-.restaurant-floor.show-grid::before {
-  border-color: rgba(59, 130, 246, 0.5);
-}
-
-/* Layout elements */
-.layout-element {
-  position: absolute;
-  box-sizing: border-box;
-  user-select: none;
-  transition: all 0.2s ease;
-}
-
-/* Forzar visibilidad de mesas */
-.mesa-element {
-  display: flex !important;
-  opacity: 1 !important;
-  visibility: visible !important;
-  pointer-events: auto !important;
-}
-
-.layout-element:hover {
-  transform: scale(1.02);
-  z-index: 10;
-}
-
-.layout-element.dragging {
-  z-index: 1000;
-  opacity: 0.8;
-  transform: scale(1.05);
-  box-shadow: 0 8px 25px rgba(0,0,0,0.3) !important;
-}
-
-.layout-element.collision {
-  border-color: #ef4444 !important;
-  background-color: rgba(239, 68, 68, 0.1) !important;
-}
-
-.layout-element.resizing {
-  box-shadow: 0 0 0 2px #3b82f6, 0 8px 25px rgba(0,0,0,0.3) !important;
-  z-index: 1000;
-}
-
-.layout-element.resizing .resize-handle {
-  opacity: 1 !important;
-  background: #1d4ed8;
-}
-
-/* Resize handles para mesas */
-.mesa-element {
-  position: relative;
-}
-
-/* Botón de eliminar */
-.delete-button {
-  position: absolute;
-  top: -8px;
-  left: -8px;
-  width: 20px;
-  height: 20px;
-  background: #ef4444;
-  color: white;
-  border: 2px solid white;
-  border-radius: 50%;
-  font-size: 12px;
-  font-weight: bold;
-  cursor: pointer;
-  opacity: 0;
-  transition: all 0.2s ease;
-  z-index: 30 !important;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-}
-
-.mesa-element:hover .delete-button {
-  opacity: 1;
-}
-
-.delete-button:hover {
-  background: #dc2626;
-  transform: scale(1.1);
-}
-
-.resize-handle {
-  position: absolute;
-  width: 16px;
-  height: 16px;
-  background: #3b82f6;
-  border: 2px solid white;
-  border-radius: 50%;
-  opacity: 0;
-  transition: all 0.2s ease;
-  z-index: 25 !important;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-  pointer-events: auto !important;
-  cursor: pointer;
-}
-
-.mesa-element:hover .resize-handle,
-.mesa-element:hover .resize-handle {
-  opacity: 1;
-}
-
-.resize-handle:hover {
-  background: #1d4ed8;
-  transform: scale(1.4);
-  opacity: 1 !important;
-  box-shadow: 0 3px 6px rgba(0,0,0,0.3);
-}
-
-.resize-handle.nw { 
-  top: -8px; 
-  left: -8px; 
-  cursor: nw-resize !important; 
-}
-
-.resize-handle.ne { 
-  top: -8px; 
-  right: -8px; 
-  cursor: ne-resize !important; 
-}
-
-.resize-handle.sw { 
-  bottom: -8px; 
-  left: -8px; 
-  cursor: sw-resize !important; 
-}
-
-.resize-handle.se { 
-  bottom: -8px; 
-  right: -8px; 
-  cursor: se-resize !important; 
-}
-
-/* Templates */
-.template-element {
-  user-select: none;
-}
-
-.template-element:active {
-  transform: scale(0.95);
-}
-
-/* Utilities */
-.select-none {
-  user-select: none;
-}
-
-/* Estilos para mesas con sillas */
-.table-with-chairs {
-  position: relative;
-  width: 100%;
-  height: 100%;
-}
-
-.table-surface {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 2;
-}
-
-.chair {
-  position: absolute;
-  background: rgba(139, 69, 19, 0.8); /* Color marrón para las sillas */
-  border: 1px solid rgba(101, 49, 15, 0.9);
-  z-index: 1;
-}
-
-/* Sillas para mesa cuadrada */
-.square-table .table-surface {
-  width: 50px;
-  height: 50px;
-  background: inherit;
-  border-radius: 6px;
-  border: 2px solid rgba(255,255,255,0.3);
-}
-
-.square-table .chair {
-  width: 12px;
-  height: 16px;
-  border-radius: 2px;
-}
-
-.square-table .chair.top {
-  top: -18px;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-.square-table .chair.right {
-  right: -14px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 16px;
-  height: 12px;
-}
-
-.square-table .chair.bottom {
-  bottom: -18px;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-.square-table .chair.left {
-  left: -14px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 16px;
-  height: 12px;
-}
-
-/* Sillas para mesa rectangular */
-.rectangular-table .table-surface {
-  width: 80px;
-  height: 50px;
-  background: inherit;
-  border-radius: 6px;
-  border: 2px solid rgba(255,255,255,0.3);
-}
-
-.rectangular-table .chair {
-  width: 12px;
-  height: 16px;
-  border-radius: 2px;
-}
-
-.rectangular-table .chair.top-left {
-  top: -18px;
-  left: 20px;
-}
-
-.rectangular-table .chair.top-right {
-  top: -18px;
-  right: 20px;
-}
-
-.rectangular-table .chair.right {
-  right: -14px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 16px;
-  height: 12px;
-}
-
-.rectangular-table .chair.bottom-right {
-  bottom: -18px;
-  right: 20px;
-}
-
-.rectangular-table .chair.bottom-left {
-  bottom: -18px;
-  left: 20px;
-}
-
-.rectangular-table .chair.left {
-  left: -14px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 16px;
-  height: 12px;
-}
-
-/* Botón de rotación */
-.rotate-handle {
-  position: absolute;
-  top: -12px;
-  right: -12px;
-  width: 24px;
-  height: 24px;
-  background: #f59e0b;
-  border: 2px solid white;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  opacity: 0;
-  transition: all 0.2s ease;
-  z-index: 30;
-  font-size: 10px;
-  color: white;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-}
-
-.layout-element:hover .rotate-handle {
-  opacity: 1;
-}
-
-.rotate-handle:hover {
-  background: #d97706;
-  transform: scale(1.2) rotate(90deg);
-  box-shadow: 0 3px 6px rgba(0,0,0,0.3);
-}
-
-.rotate-handle:active {
-  transform: scale(1.1) rotate(180deg);
-}
-
-/* Indicador de ángulo */
-.layout-element::before {
-  content: attr(data-rotation) "°";
-  position: absolute;
-  top: -25px;
-  right: -5px;
-  background: rgba(0, 0, 0, 0.7);
-  color: white;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 10px;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-  z-index: 35;
-  pointer-events: none;
-}
-
-.layout-element:hover::before {
-  opacity: 1;
-}
-
-/* Efectos de rotación */
-.layout-element {
-  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  transform-origin: center center;
-}
-
-.layout-element.rotating {
-  transform-origin: center center;
-}
-
-/* Estilos para mesas con orden activa */
-.mesa-element.con-orden {
-  border-color: #ef4444 !important;
-  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.3), 0 4px 15px rgba(239, 68, 68, 0.2) !important;
-  animation: ordenPulse 2s infinite;
-}
-
-.mesa-element.con-orden::before {
-  content: '';
-  position: absolute;
-  inset: -3px;
-  background: linear-gradient(45deg, transparent, rgba(239, 68, 68, 0.3), transparent);
-  border-radius: inherit;
-  z-index: -1;
-  animation: ordenRing 3s linear infinite;
-}
-
-@keyframes ordenPulse {
-  0%, 100% {
-    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.3), 0 4px 15px rgba(239, 68, 68, 0.2);
-  }
-  50% {
-    box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.4), 0 6px 20px rgba(239, 68, 68, 0.3);
-  }
-}
-
-@keyframes ordenRing {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
-}
-
-/* Estilos para botones de acción integrados */
-.mesa-action-btn {
-  font-size: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  backdrop-filter: blur(4px);
-  pointer-events: auto;
-}
-
-.mesa-action-btn:hover {
-  border-color: rgba(255, 255, 255, 0.4);
-}
-
-/* Ajustes para contenido de mesa */
-.mesa-content {
-  pointer-events: none;
-  text-align: center;
-  width: 100%;
-  padding: 0 4px;
-  box-sizing: border-box;
-}
-
-.mesa-content > * {
-  pointer-events: none;
-}
-
-/* Estilos para información del mesero */
-.mesa-content div[style*="font-size: 9px"] {
-  background: rgba(0, 0, 0, 0.2);
-  padding: 2px 6px;
-  border-radius: 4px;
-  max-width: 95%;
-  margin-left: auto;
-  margin-right: auto;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-weight: 600;
-  letter-spacing: 0.3px;
-}
-
-/* Handles visibles en hover */
-.mesa-element:hover .resize-handle,
-.mesa-element:hover .rotate-handle,
-.mesa-element:hover .delete-button {
-  opacity: 1 !important;
-}
-
-.resize-handle:hover {
-  background: #1d4ed8 !important;
-  transform: scale(1.2);
-}
-
-.rotate-handle:hover {
-  background: #f97316 !important;
-  transform: scale(1.2);
-}
-
-.delete-button:hover {
-  background: #dc2626 !important;
-  transform: scale(1.1);
-}
-</style>
-
-<!-- JavaScript para el Layout Designer -->
-<script>
-// Configuración de rutas
-const BASE_URL = window.location.origin + '/POSSystemKalli/';
-const CONTROLLER_URL = BASE_URL + 'controllers/guardar_layout_temp.php'; // Temporal - funciona sin auth
-
 document.addEventListener('DOMContentLoaded', function() {
-    // === VARIABLES GLOBALES ===
-    let isDragging = false;
-    let isResizing = false;
-    let currentElement = null;
-    let currentHandle = null;
-    let startX, startY, startLeft, startTop, startWidth, startHeight;
-    let gridSize = 20;
-    let showGrid = false;
-    let mesasFromDB = <?= json_encode($mesas) ?>;
-
-    const restaurantFloor = document.getElementById('restaurantFloor');
-
-    // === INICIALIZACIÓN ===
-    initializeSystem();
-
-    function initializeSystem() {
-        console.log('🚀 Inicializando sistema de mesas...');
-        setupEventListeners();
-        setupDragAndDrop();
-        addResizeHandlesToAllMesas();
-        setupContextMenus();
-        setupRotationHandlers();
-        setupFormHandlers();
-        verificarMesas();
-    }
-
-    function verificarMesas() {
-        console.log('🔍 Verificando mesas...');
-        const mesas = document.querySelectorAll('[data-mesa-id]');
-        console.log(`Total mesas: ${mesas.length}`);
-        
-        mesas.forEach((mesa, index) => {
-            const rect = mesa.getBoundingClientRect();
-            console.log(`Mesa ${index + 1}: ${mesa.dataset.mesaNombre} - Visible: ${rect.width > 0 && rect.height > 0}`);
-        });
-    }
-
-    // === EVENT LISTENERS PRINCIPALES ===
-    function setupEventListeners() {
-        // Botones principales
-        document.getElementById('toggleGrid').addEventListener('click', toggleGrid);
-        document.getElementById('saveLayout').addEventListener('click', guardarLayoutCompleto);
-        document.getElementById('resetLayout').addEventListener('click', resetLayout);
-        
-        // Eventos globales de mouse
-        document.addEventListener('mousemove', handleMouseMove);
-        document.addEventListener('mouseup', stopDragResize);
-    }
-
-    function setupDragAndDrop() {
-        const mesas = document.querySelectorAll('.mesa-element');
-        mesas.forEach(mesa => {
-            mesa.addEventListener('mousedown', startDrag);
-        });
-    }
-
     function setupFormHandlers() {
         const form = document.getElementById('crearMesaForm');
         if (form) {
@@ -1400,278 +682,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    function setupContextMenus() {
-        const mesas = document.querySelectorAll('.mesa-element');
-        mesas.forEach(mesa => {
-            mesa.addEventListener('contextmenu', showContextMenu);
-        });
-    }
-
-    function setupRotationHandlers() {
-        const mesas = document.querySelectorAll('.mesa-element');
-        mesas.forEach(mesa => {
-            mesa.addEventListener('dblclick', rotateMesa);
-        });
-    }
-
-    // === RESIZE HANDLES ===
-    function addResizeHandlesToAllMesas() {
-        const mesas = document.querySelectorAll('.mesa-element');
-        mesas.forEach(mesa => {
-            addResizeHandlesToElement(mesa);
-        });
-    }
-
-    function addResizeHandlesToElement(element) {
-        // Remover handles existentes
-        element.querySelectorAll('.resize-handle').forEach(handle => handle.remove());
-        
-        const handles = ['nw', 'ne', 'sw', 'se'];
-        handles.forEach(direction => {
-            const handle = document.createElement('div');
-            handle.className = `resize-handle ${direction}`;
-            handle.addEventListener('mousedown', (e) => startResize(e, direction));
-            element.appendChild(handle);
-        });
-
-        // Agregar botón de eliminar si no existe
-        if (!element.querySelector('.delete-button')) {
-            const deleteBtn = document.createElement('button');
-            deleteBtn.className = 'delete-button';
-            deleteBtn.innerHTML = '×';
-            deleteBtn.title = 'Eliminar mesa';
-            deleteBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                eliminarMesa(element);
-            });
-            element.appendChild(deleteBtn);
-        }
-
-        // Agregar botón de rotación si no existe
-        if (!element.querySelector('.rotate-handle')) {
-            const rotateBtn = document.createElement('div');
-            rotateBtn.className = 'rotate-handle';
-            rotateBtn.innerHTML = '↻';
-            rotateBtn.title = 'Rotar mesa';
-            rotateBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                rotateMesa({ currentTarget: element, preventDefault: () => {}, stopPropagation: () => {} });
-            });
-            element.appendChild(rotateBtn);
-        }
-    }
-
-    // === DRAG & DROP ===
-    function startDrag(e) {
-        if (e.target.classList.contains('resize-handle') || 
-            e.target.classList.contains('rotate-handle') ||
-            e.target.classList.contains('delete-button') ||
-            e.target.classList.contains('mesa-action-btn')) {
-            return;
-        }
-
-        e.preventDefault();
-        e.stopPropagation();
-
-        isDragging = true;
-        currentElement = e.currentTarget;
-
-        startX = e.clientX;
-        startY = e.clientY;
-        startLeft = parseInt(currentElement.style.left) || 0;
-        startTop = parseInt(currentElement.style.top) || 0;
-
-        currentElement.style.zIndex = '1000';
-        currentElement.style.cursor = 'grabbing';
-
-        console.log(`Iniciando arrastre de ${currentElement.dataset.mesaNombre}`);
-    }
-
-    function startResize(e, direction) {
-        e.preventDefault();
-        e.stopPropagation();
-
-        isResizing = true;
-        currentElement = e.target.parentElement;
-        currentHandle = direction;
-
-        startX = e.clientX;
-        startY = e.clientY;
-        startLeft = parseInt(currentElement.style.left) || 0;
-        startTop = parseInt(currentElement.style.top) || 0;
-        startWidth = currentElement.offsetWidth;
-        startHeight = currentElement.offsetHeight;
-
-        currentElement.style.zIndex = '1000';
-
-        console.log(`Iniciando redimensión ${direction} de ${currentElement.dataset.mesaNombre}`);
-    }
-
-    function handleMouseMove(e) {
-        if (isDragging) {
-            drag(e);
-        } else if (isResizing) {
-            resize(e);
-        }
-    }
-
-    function drag(e) {
-        if (!isDragging || !currentElement) return;
-
-        const deltaX = e.clientX - startX;
-        const deltaY = e.clientY - startY;
-
-        let newLeft = startLeft + deltaX;
-        let newTop = startTop + deltaY;
-
-        // Snap to grid si está habilitado
-        if (showGrid) {
-            newLeft = Math.round(newLeft / gridSize) * gridSize;
-            newTop = Math.round(newTop / gridSize) * gridSize;
-        }
-
-        // Limitar al contenedor
-        const container = restaurantFloor;
-        const containerRect = container.getBoundingClientRect();
-        const elementRect = currentElement.getBoundingClientRect();
-
-        newLeft = Math.max(5, Math.min(newLeft, containerRect.width - elementRect.width - 5));
-        newTop = Math.max(5, Math.min(newTop, containerRect.height - elementRect.height - 5));
-
-        currentElement.style.left = newLeft + 'px';
-        currentElement.style.top = newTop + 'px';
-    }
-
-    function resize(e) {
-        if (!isResizing || !currentElement) return;
-
-        const deltaX = e.clientX - startX;
-        const deltaY = e.clientY - startY;
-
-        let newWidth = startWidth;
-        let newHeight = startHeight;
-        let newLeft = startLeft;
-        let newTop = startTop;
-
-        switch(currentHandle) {
-            case 'se':
-                newWidth = startWidth + deltaX;
-                newHeight = startHeight + deltaY;
-                break;
-            case 'sw':
-                newWidth = startWidth - deltaX;
-                newHeight = startHeight + deltaY;
-                newLeft = startLeft + deltaX;
-                break;
-            case 'ne':
-                newWidth = startWidth + deltaX;
-                newHeight = startHeight - deltaY;
-                newTop = startTop + deltaY;
-                break;
-            case 'nw':
-                newWidth = startWidth - deltaX;
-                newHeight = startHeight - deltaY;
-                newLeft = startLeft + deltaX;
-                newTop = startTop + deltaY;
-                break;
-        }
-
-        // Límites mínimos
-        newWidth = Math.max(60, newWidth);
-        newHeight = Math.max(40, newHeight);
-
-        // Aplicar cambios
-        currentElement.style.width = newWidth + 'px';
-        currentElement.style.height = newHeight + 'px';
-        currentElement.style.left = newLeft + 'px';
-        currentElement.style.top = newTop + 'px';
-    }
-
-    function stopDragResize() {
-        if (isDragging) {
-            console.log(`Arrastre finalizado: ${currentElement?.dataset.mesaNombre}`);
-            isDragging = false;
-            
-            if (currentElement) {
-                currentElement.style.zIndex = '500';
-                currentElement.style.cursor = 'move';
-                guardarPosicionMesa(currentElement);
-            }
-        }
-
-        if (isResizing) {
-            console.log(`Redimensión finalizada: ${currentElement?.dataset.mesaNombre}`);
-            isResizing = false;
-            
-            if (currentElement) {
-                currentElement.style.zIndex = '500';
-                guardarPosicionMesa(currentElement);
-            }
-        }
-
-        currentElement = null;
-        currentHandle = null;
-    }
-
-    // === FUNCIONES DE MESA ===
-    function abrirMesa(mesaId, mesaNombre) {
-        console.log(`Abriendo mesa ${mesaNombre} (ID: ${mesaId})`);
-        
-        // Abrir directamente el POS para esta mesa en la misma ventana
-        window.location.href = `index.php?page=mesa&id=${mesaId}`;
-    }
-
-    function rotateMesa(e) {
-        e.preventDefault();
-        e.stopPropagation();
-
-        const mesa = e.currentTarget;
-        const currentRotation = parseFloat(mesa.dataset.rotation) || 0;
-        const newRotation = (currentRotation + 90) % 360;
-
-        mesa.dataset.rotation = newRotation;
-        mesa.style.transform = `rotate(${newRotation}deg)`;
-
-        console.log(`Mesa ${mesa.dataset.mesaNombre} rotada a ${newRotation}°`);
-        guardarPosicionMesa(mesa);
-    }
-
-    function showContextMenu(e) {
-        e.preventDefault();
-        e.stopPropagation();
-
-        const mesa = e.currentTarget;
-        const mesaId = mesa.dataset.mesaId;
-        const mesaNombre = mesa.dataset.mesaNombre;
-
-        // Crear menú contextual usando SweetAlert2
-        Swal.fire({
-            title: `Mesa: ${mesaNombre}`,
-            html: `
-                <div class="flex flex-col gap-2">
-                    <button onclick="rotateMesa({currentTarget: document.querySelector('[data-mesa-id=\\"${mesaId}\\"]'), preventDefault: () => {}, stopPropagation: () => {}}); Swal.close();" 
-                            class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">
-                        🔄 Rotar 90°
-                    </button>
-                    <button onclick="abrirMesa(${mesaId}, '${mesaNombre}'); Swal.close();" 
-                            class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded">
-                        🍽️ Abrir POS
-                    </button>
-                    <button onclick="eliminarMesa(document.querySelector('[data-mesa-id=\\"${mesaId}\\"]')); Swal.close();" 
-                            class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded">
-                        🗑️ Eliminar Mesa
-                    </button>
-                </div>
-            `,
-            showConfirmButton: false,
-            showCancelButton: true,
-            cancelButtonText: 'Cerrar',
-            background: '#1f2937',
-            color: '#ffffff'
-        });
-    }
+    setupFormHandlers();
 
     function eliminarMesa(mesaElement) {
         const mesaId = mesaElement.dataset.mesaId;
@@ -1691,7 +702,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }).then((result) => {
             if (result.isConfirmed) {
                 // Hacer petición AJAX para eliminar
-                fetch('../controllers/crear_mesa.php', {
+                fetch('controllers/crear_mesa.php', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',
@@ -1735,211 +746,94 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    function guardarPosicionMesa(element) {
-        const mesaId = element.dataset.mesaId;
-        if (!mesaId) return;
-
-        const left = parseInt(element.style.left) || 0;
-        const top = parseInt(element.style.top) || 0;
-        const width = element.offsetWidth;
-        const height = element.offsetHeight;
-        const rotation = parseFloat(element.dataset.rotation) || 0;
-
-        console.log(`💾 Guardando posición mesa ${mesaId}: x:${left}, y:${top}, w:${width}, h:${height}, r:${rotation}`);
-        console.log(`📡 URL: ${CONTROLLER_URL}`);
-
-        fetch(CONTROLLER_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: `mesa_id=${mesaId}&pos_x=${left}&pos_y=${top}&width=${width}&height=${height}&rotation=${rotation}&tipo_visual=rectangular`
-        })
-        .then(response => {
-            console.log('📡 Response status:', response.status);
-            console.log('📡 Response ok:', response.ok);
-            console.log('📡 Response headers:', [...response.headers.entries()]);
-            
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
-            }
-            
-            // Primero obtener el texto para ver qué respuesta recibimos
-            return response.text();
-        })
-        .then(text => {
-            console.log('📄 Response text:', text);
-            
-            // Intentar parsear como JSON
-            try {
-                const data = JSON.parse(text);
-                console.log('📊 Parsed JSON:', data);
-                
-                if (data.success) {
-                    console.log(`✅ Posición guardada para mesa ${mesaId}:`, data.data);
-                    
-                    // Mostrar confirmación visual
-                    Swal.fire({
-                        icon: 'success',
-                        title: 'Guardado',
-                        text: `Posición de mesa guardada`,
-                        timer: 1000,
-                        showConfirmButton: false,
-                        toast: true,
-                        position: 'top-end',
-                        background: '#1f2937',
-                        color: '#ffffff',
-                        iconColor: '#10b981'
-                    });
-                } else {
-                    console.error(`❌ Error guardando posición: ${data.error}`);
-                    
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Error',
-                        text: `Error al guardar: ${data.error}`,
-                        background: '#1f2937',
-                        color: '#ffffff'
-                    });
-                }
-            } catch (parseError) {
-                console.error('❌ Error parseando JSON:', parseError);
-                console.error('❌ Texto recibido:', text);
-                
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Error de formato',
-                    text: 'El servidor devolvió una respuesta inválida',
-                    background: '#1f2937',
-                    color: '#ffffff'
-                });
-            }
-        })
-        .catch(error => {
-            console.error('🚨 Error completo:', error);
-            console.error('🚨 Error message:', error.message);
-            console.error('🚨 Error stack:', error.stack);
-            
-            Swal.fire({
-                icon: 'error',
-                title: 'Error de conexión',
-                text: `No se pudo conectar con el servidor: ${error.message}`,
-                background: '#1f2937',
-                color: '#ffffff'
-            });
-        });
-    }
-
-    // === FUNCIONES DE CONTROL ===
-    function toggleGrid() {
-        showGrid = !showGrid;
-        const gridBtn = document.getElementById('toggleGrid');
-        restaurantFloor.classList.toggle('show-grid', showGrid);
-        gridBtn.textContent = showGrid ? '📏 Grid ON' : '📏 Grid OFF';
-        gridBtn.style.background = showGrid ? '#059669' : '#3b82f6';
-        console.log('Grid:', showGrid ? 'Activado' : 'Desactivado');
-    }
-
-    function guardarLayoutCompleto() {
-        console.log('💾 Guardando layout completo...');
-        
-        const mesas = document.querySelectorAll('[data-mesa-id]');
-        const layouts = [];
-        
-        mesas.forEach(mesa => {
-            layouts.push({
-                mesa_id: mesa.dataset.mesaId,
-                pos_x: parseInt(mesa.style.left) || 0,
-                pos_y: parseInt(mesa.style.top) || 0,
-                width: mesa.offsetWidth,
-                height: mesa.offsetHeight,
-                rotation: parseFloat(mesa.dataset.rotation) || 0,
-                tipo_visual: 'rectangular'
-            });
-        });
-        
-        console.log('📋 Datos a guardar:', layouts);
-        console.log(`📡 URL: ${CONTROLLER_URL}`);
-        
-        fetch(CONTROLLER_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ layouts: layouts })
-        })
-        .then(response => {
-            console.log('📡 Batch Response status:', response.status);
-            console.log('📡 Batch Response ok:', response.ok);
-            
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
-            }
-            
-            return response.json();
-        })
-        .then(data => {
-            if (data.success) {
-                console.log('✅ Layout completo guardado');
-                
-                Swal.fire({
-                    icon: 'success',
-                    title: '¡Layout guardado!',
-                    text: `Se guardaron ${layouts.length} mesas correctamente`,
-                    timer: 2000,
-                    showConfirmButton: false,
-                    toast: true,
-                    position: 'top-end',
-                    background: '#1f2937',
-                    color: '#ffffff'
-                });
-            } else {
-                console.error('❌ Error:', data.error);
-                
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Error',
-                    text: 'Error al guardar layout: ' + (data.error || 'Error desconocido'),
-                    background: '#1f2937',
-                    color: '#ffffff'
-                });
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            Swal.fire({
-                icon: 'error',
-                title: 'Error',
-                text: 'Error de conexión al guardar layout',
-                background: '#1f2937',
-                color: '#ffffff'
-            });
-        });
-    }
-
-    function resetLayout() {
-        Swal.fire({
-            title: '¿Resetear Layout?',
-            text: '¿Está seguro de que desea resetear todas las posiciones al layout por defecto?',
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonColor: '#ef4444',
-            cancelButtonColor: '#6b7280',
-            confirmButtonText: 'Sí, resetear',
-            cancelButtonText: 'Cancelar',
-            background: '#1f2937',
-            color: '#ffffff'
-        }).then((result) => {
-            if (result.isConfirmed) {
-                location.reload();
-            }
-        });
-    }
-
-    // === ACTUALIZACIÓN AUTOMÁTICA DE ESTADO DE MESAS ===
+    // === ACTUALIZACIÓN AUTOMÁTICA DE ESTADO DE MESAS (AJAX, sin recargar la página) ===
     let autoUpdateInterval = null;
     let ultimaActualizacion = Date.now();
-    
+
+    // Actualiza la tarjeta del grid superior (kiosk-mesa-card) con los datos recibidos
+    function actualizarTarjetaKiosk(mesaData) {
+        const card = document.querySelector(`.kiosk-mesa-card[data-mesa-id="${mesaData.id}"]`);
+        if (!card) return;
+
+        const shell = card.querySelector('.mesa-card-shell');
+        const ocupada = mesaData.estado === 'ocupada';
+
+        if (shell) {
+            shell.classList.toggle('mesa-card-ocupada', ocupada);
+            shell.classList.toggle('mesa-card-libre', !ocupada);
+        }
+
+        const accent = card.querySelector('.mesa-card-accent');
+        if (accent) {
+            accent.classList.toggle('from-red-500', ocupada);
+            accent.classList.toggle('to-pink-600', ocupada);
+            accent.classList.toggle('from-emerald-500', !ocupada);
+            accent.classList.toggle('to-cyan-600', !ocupada);
+        }
+
+        const pill = card.querySelector('.mesa-card-pill');
+        const pillText = card.querySelector('.mesa-status-text');
+        if (pill && pillText) {
+            pill.classList.toggle('bg-rose-500/15', ocupada);
+            pill.classList.toggle('text-rose-100', ocupada);
+            pill.classList.toggle('border-rose-400/30', ocupada);
+            pill.classList.toggle('bg-emerald-500/15', !ocupada);
+            pill.classList.toggle('text-emerald-100', !ocupada);
+            pill.classList.toggle('border-emerald-400/30', !ocupada);
+            pillText.textContent = ocupada ? 'Ocupada' : 'Disponible';
+        }
+
+        const estadoValor = card.querySelector('.mesa-estado-valor');
+        if (estadoValor) {
+            estadoValor.textContent = ocupada ? 'Ocupada' : 'Disponible';
+            estadoValor.classList.toggle('text-red-400', ocupada);
+            estadoValor.classList.toggle('text-green-400', !ocupada);
+        }
+
+        const totalRow = card.querySelector('.mesa-total-row');
+        const totalValor = card.querySelector('.mesa-total-valor');
+        if (totalRow && totalValor) {
+            totalRow.style.display = ocupada ? '' : 'none';
+            totalValor.textContent = '$' + Number(mesaData.total || 0).toFixed(2);
+            totalValor.classList.toggle('text-red-300', ocupada);
+            totalValor.classList.toggle('text-emerald-300', !ocupada);
+        }
+
+        const meseroRow = card.querySelector('.mesa-mesero-row');
+        const meseroValor = card.querySelector('.mesa-mesero-valor');
+        const tieneMesero = ocupada && mesaData.mesero_nombre && mesaData.mesero_nombre.trim() !== '';
+        if (meseroRow && meseroValor) {
+            meseroRow.style.display = tieneMesero ? '' : 'none';
+            meseroValor.textContent = tieneMesero ? mesaData.mesero_nombre : '';
+        }
+
+        const dispRow = card.querySelector('.mesa-disponibilidad-row');
+        if (dispRow) dispRow.style.display = ocupada ? 'none' : '';
+
+        const posBtn = card.querySelector('.mesa-pos-btn');
+        const posBtnText = card.querySelector('.mesa-pos-btn-text');
+        const posBtnIcon = card.querySelector('.mesa-pos-btn-icon');
+        if (posBtn) {
+            posBtn.style.background = ocupada
+                ? 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)'
+                : 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+        }
+        if (posBtnText) posBtnText.textContent = ocupada ? 'Ver POS' : 'Abrir POS';
+        if (posBtnIcon) {
+            posBtnIcon.classList.toggle('bi-eye', ocupada);
+            posBtnIcon.classList.toggle('bi-arrow-right-circle', !ocupada);
+        }
+
+        const thermalBtn = card.querySelector('.mesa-thermal-btn');
+        if (thermalBtn) {
+            const mostrar = ocupada && mesaData.orden_id;
+            thermalBtn.style.display = mostrar ? '' : 'none';
+            if (mostrar) {
+                thermalBtn.setAttribute('onclick', `event.stopPropagation(); event.preventDefault(); imprimirTicketTermico(${mesaData.orden_id})`);
+            }
+        }
+    }
+
     function actualizarEstadoMesas(silencioso = false) {
         if (!silencioso) {
             console.log('🔄 Verificando estado actual de mesas...');
@@ -1985,37 +879,29 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
             
-            // Actualizar estado visual de cada mesa
+            // Actualizar cada mesa en el DOM (grid kiosk), sin recargar la página
             let hayDiferencias = false;
             
             data.mesas.forEach(mesaData => {
-                const mesaElement = document.querySelector(`[data-mesa-id="${mesaData.id}"]`);
-                if (!mesaElement) return;
-                
-                // Verificar si hay cambios en el estado
-                const estadoActual = mesaElement.classList.contains('mesa-ocupada') ? 'ocupada' : 'libre';
-                const estadoNuevo = mesaData.estado;
-                
-                if (estadoActual !== estadoNuevo) {
-                    console.log(`🔄 Mesa "${mesaData.nombre}": ${estadoActual} → ${estadoNuevo}`);
-                    hayDiferencias = true;
+                const card = document.querySelector(`.kiosk-mesa-card[data-mesa-id="${mesaData.id}"]`);
+                if (card) {
+                    const estadoActual = card.dataset.ordenAbierta > 0 ? 'ocupada' : 'libre';
+                    const totalActual = parseFloat(card.dataset.ordenTotal) || 0;
+                    const totalNuevo = parseFloat(mesaData.total) || 0;
+
+                    if (estadoActual !== mesaData.estado || Math.abs(totalActual - totalNuevo) > 0.001) {
+                        hayDiferencias = true;
+                    }
+
+                    card.dataset.ordenAbierta = mesaData.ordenes_abiertas;
+                    card.dataset.ordenTotal = mesaData.total;
                 }
 
-                // Verificar si cambió el total de la orden abierta (ej: se agregaron productos)
-                const totalActual = parseFloat(mesaElement.dataset.ordenTotal) || 0;
-                const totalNuevo = parseFloat(mesaData.total) || 0;
-
-                if (Math.abs(totalActual - totalNuevo) > 0.001) {
-                    console.log(`🔄 Mesa "${mesaData.nombre}": total ${totalActual} → ${totalNuevo}`);
-                    hayDiferencias = true;
-                }
+                actualizarTarjetaKiosk(mesaData);
             });
             
-            // Si hay diferencias, recargar página completa
-            if (hayDiferencias) {
-                console.log('🔄 Detectados cambios en mesas - Recargando vista...');
-                
-                // Mostrar notificación breve
+            // Si hubo cambios, avisar discretamente (sin recargar)
+            if (hayDiferencias && !silencioso) {
                 const toast = Swal.mixin({
                     toast: true,
                     position: 'top-end',
@@ -2026,15 +912,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 toast.fire({
                     icon: 'info',
-                    title: 'Actualizando mesas...',
+                    title: 'Mesas actualizadas',
                     background: '#1f2937',
                     color: '#ffffff',
                     iconColor: '#3b82f6'
                 });
-                
-                setTimeout(() => {
-                    window.location.href = 'index.php?page=mesas&_=' + Date.now();
-                }, 500);
             }
         })
         .catch(error => {
@@ -2122,106 +1004,10 @@ document.addEventListener('DOMContentLoaded', function() {
     }, 2000); // Esperar 2 segundos después de carga inicial
 
     // === FUNCIONES GLOBALES ===
-    window.abrirMesa = abrirMesa;
-    window.rotateMesa = rotateMesa;
     window.eliminarMesa = eliminarMesa;
     window.actualizarEstadoMesas = actualizarEstadoMesas;
     window.iniciarActualizacionAutomatica = iniciarActualizacionAutomatica;
     window.detenerActualizacionAutomatica = detenerActualizacionAutomatica;
-    
-    // === FUNCIONES DE DEBUG ===
-    window.debugMesas = function() {
-        const mesas = document.querySelectorAll('[data-mesa-id]');
-        console.log('=== DEBUG MESAS ===');
-        console.log(`Total mesas en DOM: ${mesas.length}`);
-        
-        mesas.forEach((mesa, index) => {
-            const rect = mesa.getBoundingClientRect();
-            console.log(`Mesa ${index + 1} (ID: ${mesa.dataset.mesaId}):`, {
-                nombre: mesa.dataset.mesaNombre,
-                posicion: {
-                    left: mesa.style.left,
-                    top: mesa.style.top,
-                    width: mesa.style.width + '/' + mesa.offsetWidth,
-                    height: mesa.style.height + '/' + mesa.offsetHeight
-                },
-                rotacion: mesa.dataset.rotation,
-                visible: rect.width > 0 && rect.height > 0,
-                rect: rect
-            });
-        });
-        
-        // Mostrar datos de BD
-        console.log('Layouts cargados de BD:', <?= json_encode($layout_positions) ?>);
-    };
-    
-    window.mostrarLayouts = function() {
-        console.log('=== LAYOUTS GUARDADOS EN BD ===');
-        console.log(<?= json_encode($layout_positions) ?>);
-        
-        Swal.fire({
-            title: 'Layouts en BD',
-            html: '<pre style="text-align: left; font-size: 12px;">' + JSON.stringify(<?= json_encode($layout_positions) ?>, null, 2) + '</pre>',
-            width: 600,
-            background: '#1f2937',
-            color: '#ffffff'
-        });
-    };
-    
-    window.testConexion = function() {
-        console.log('🧪 Probando conexión...');
-        console.log('🌐 URL a probar:', CONTROLLER_URL);
-        console.log('🌐 Base URL:', BASE_URL);
-        console.log('🌐 Current URL:', window.location.href);
-        
-        fetch(CONTROLLER_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: 'mesa_id=999&pos_x=0&pos_y=0&width=120&height=80&rotation=0&tipo_visual=test'
-        })
-        .then(response => {
-            console.log('✅ Respuesta recibida:', response.status, response.statusText);
-            return response.text();
-        })
-        .then(text => {
-            console.log('📄 Respuesta texto:', text);
-            
-            try {
-                const data = JSON.parse(text);
-                console.log('📊 Respuesta JSON:', data);
-                
-                Swal.fire({
-                    icon: data.success ? 'success' : 'info',
-                    title: 'Test de Conexión',
-                    text: data.message || data.error || 'Conexión establecida',
-                    background: '#1f2937',
-                    color: '#ffffff'
-                });
-            } catch (e) {
-                console.log('⚠️ No es JSON válido');
-                Swal.fire({
-                    icon: 'warning',
-                    title: 'Respuesta del servidor',
-                    text: 'Servidor responde pero no envía JSON válido',
-                    background: '#1f2937',
-                    color: '#ffffff'
-                });
-            }
-        })
-        .catch(error => {
-            console.error('❌ Error de conexión:', error);
-            
-            Swal.fire({
-                icon: 'error',
-                title: 'Error de Conexión',
-                text: `No se puede conectar: ${error.message}`,
-                background: '#1f2937',
-                color: '#ffffff'
-            });
-        });
-    };
 });
 </script>
 
