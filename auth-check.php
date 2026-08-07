@@ -17,26 +17,23 @@ if (session_status() == PHP_SESSION_NONE) {
     session_start();
 }
 
-// Solo crear sesión automática si NO hay datos de usuario ya establecidos
-if (!isset($_SESSION['user_data']) && (!isset($_SESSION['authenticated']) || !$_SESSION['authenticated'])) {
-    // Esto solo debe pasar en desarrollo o si no hay un login real
-    $_SESSION['authenticated'] = true;
-    $_SESSION['user_data'] = [
-        'user_id' => 1,
-        'username' => 'admin',
-        'rol' => 'administrador',
-        'permisos' => [
-            'mesas' => ['ver' => true, 'crear' => true, 'editar' => true, 'eliminar' => true],
-            'ordenes' => ['ver' => true, 'crear' => true, 'editar' => true, 'eliminar' => true],
-            'productos' => ['ver' => true, 'crear' => true, 'editar' => true, 'eliminar' => true],
-            'promociones' => ['ver' => true, 'crear' => true, 'editar' => true, 'eliminar' => true],
-            'reportes' => ['ver' => true, 'crear' => true, 'editar' => true, 'eliminar' => true, 'exportar' => true],
-            'cocina' => ['ver' => true, 'crear' => true, 'editar' => true, 'eliminar' => true],
-            'bar' => ['ver' => true, 'crear' => true, 'editar' => true, 'eliminar' => true],
-            'configuracion' => ['ver' => true, 'crear' => true, 'editar' => true, 'eliminar' => true],
-            'usuarios' => ['ver' => true, 'crear' => true, 'editar' => true, 'eliminar' => true]
-        ]
-    ];
+// Requiere una sesión real creada por auth/login.php; no se otorga acceso por defecto
+if (!isset($_SESSION['user_data']) || !isset($_SESSION['authenticated']) || !$_SESSION['authenticated']) {
+    $esPeticionApi = (
+        (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') ||
+        (isset($_SERVER['HTTP_ACCEPT']) && strpos($_SERVER['HTTP_ACCEPT'], 'application/json') !== false) ||
+        strpos($_SERVER['REQUEST_URI'] ?? '', '/api/') !== false ||
+        strpos($_SERVER['REQUEST_URI'] ?? '', '/controllers/') !== false
+    );
+
+    if ($esPeticionApi) {
+        http_response_code(401);
+        header('Content-Type: application/json');
+        echo json_encode(['success' => false, 'message' => 'Sesión no válida, inicia sesión nuevamente']);
+    } else {
+        header('Location: ' . rtrim(APP_URL, '/') . '/login.php');
+    }
+    exit;
 }
 
 // Asegurar que $_SESSION['usuario_id'] esté disponible para compatibilidad con código legacy
@@ -157,43 +154,21 @@ function hasRole($role) {
 // Función helper para obtener información del usuario para mostrar en UI
 function getUserInfo() {
     $user = getCurrentUser();
-    
-    // Para propósitos de desarrollo, permitir cambiar rol con parámetro GET
-    $rol_override = $_GET['test_role'] ?? null;
-    $roles_validos = ['administrador', 'gerente', 'cajero', 'mesero', 'cocinero', 'bartender'];
-    
+
     if (!$user) {
-        $rol_por_defecto = 'administrador';
-        
-        // Si hay un rol override válido, usarlo
-        if ($rol_override && in_array($rol_override, $roles_validos)) {
-            $rol_por_defecto = $rol_override;
-        }
-        
-        return [
-            'id' => 1,
-            'username' => 'usuario_' . $rol_por_defecto,
-            'rol' => $rol_por_defecto,
-            'permisos' => []
-        ];
+        // No debería ocurrir: el bloqueo de arriba ya exige una sesión válida
+        return ['id' => null, 'username' => null, 'rol' => null, 'permisos' => []];
     }
-    
-    $rol_usuario = $user['rol'];
-    
-    // Si hay un rol override válido, usarlo
-    if ($rol_override && in_array($rol_override, $roles_validos)) {
-        $rol_usuario = $rol_override;
-    }
-    
+
     return [
         'id' => $user['user_id'],
         'username' => $user['username'],
-        'rol' => $rol_usuario,
+        'rol' => $user['rol'],
         'permisos' => $user['permisos']
     ];
 }
 
 // Variables de compatibilidad para controladores
-$_SESSION['user_id'] = $_SESSION['user_data']['user_id'] ?? 1;
-$_SESSION['role'] = $_SESSION['user_data']['rol'] ?? 'administrador';
-$_SESSION['username'] = $_SESSION['user_data']['username'] ?? 'admin';
+$_SESSION['user_id'] = $_SESSION['user_data']['user_id'];
+$_SESSION['role'] = $_SESSION['user_data']['rol'];
+$_SESSION['username'] = $_SESSION['user_data']['username'];

@@ -66,28 +66,28 @@
       "name": "Mesas",
       "short_name": "Mesas",
       "description": "Ver y administrar mesas",
-      "url": "/POS/index.php?page=mesas",
+      "url": "/POSSystemKalli/index.php?page=mesas",
       "icons": [{ "src": "assets/icons/shortcut-mesas.png", "sizes": "96x96" }]
     },
     {
       "name": "Productos",
       "short_name": "Productos", 
       "description": "Gestionar productos del menú",
-      "url": "/POS/index.php?page=productos",
+      "url": "/POSSystemKalli/index.php?page=productos",
       "icons": [{ "src": "assets/icons/shortcut-productos.png", "sizes": "96x96" }]
     },
     {
       "name": "Cocina",
       "short_name": "Cocina",
       "description": "Panel de cocina",
-      "url": "/POS/index.php?page=cocina", 
+      "url": "/POSSystemKalli/index.php?page=cocina", 
       "icons": [{ "src": "assets/icons/shortcut-cocina.png", "sizes": "96x96" }]
     },
     {
       "name": "Reportes",
       "short_name": "Reportes",
       "description": "Ver reportes y estadísticas",
-      "url": "/POS/index.php?page=reportes",
+      "url": "/POSSystemKalli/index.php?page=reportes",
       "icons": [{ "src": "assets/icons/shortcut-reportes.png", "sizes": "96x96" }]
     }
   ],

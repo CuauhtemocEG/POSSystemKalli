@@ -121,7 +121,7 @@ try {
     $producto = $stmt->fetch();
     
     // Obtener datos de la mesa
-    $stmt = $pdo->prepare("SELECT m.nombre FROM mesas m JOIN ordenes o ON m.id = o.mesa_id WHERE o.id = ?");
+    $stmt = $pdo->prepare("SELECT m.nombre, o.codigo FROM mesas m JOIN ordenes o ON m.id = o.mesa_id WHERE o.id = ?");
     $stmt->execute([$orden_id]);
     $mesa = $stmt->fetch();
     

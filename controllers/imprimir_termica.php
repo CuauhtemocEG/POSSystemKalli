@@ -776,7 +776,6 @@ class ImpresorTermica {
         $archivoTemp = tempnam(sys_get_temp_dir(), 'ticket_');
         file_put_contents($archivoTemp, $this->contenido);
         
-        $os = strtolower(PHP_OS);
         $resultado = '';
         $success = false;
         
@@ -784,7 +783,8 @@ class ImpresorTermica {
             // ═══════════════════════════════════════════════════════════
             // 🪟 WINDOWS - Usar método nativo de Windows
             // ═══════════════════════════════════════════════════════════
-            if (strpos($os, 'win') !== false) {
+            // PHP_OS_FAMILY es más confiable que strpos($os,'win'): 'darwin' contiene 'win' como subcadena
+            if (PHP_OS_FAMILY === 'Windows') {
                 // Método 1: copy - Más simple y directo para impresoras compartidas/USB
                 $nombreImpresoraEscapado = str_replace('"', '""', $nombreImpresora);
                 $archivoEscapado = str_replace('/', '\\', $archivoTemp);
@@ -805,9 +805,9 @@ class ImpresorTermica {
             // ═══════════════════════════════════════════════════════════
             // 🍎 macOS - Usar CUPS (lpr)
             // ═══════════════════════════════════════════════════════════
-            elseif (strpos($os, 'darwin') !== false) {
-                // Usar lpr (Common UNIX Printing System)
-                $comando = "lpr -P " . escapeshellarg($nombreImpresora) . " " . escapeshellarg($archivoTemp) . " 2>&1";
+            elseif (PHP_OS_FAMILY === 'Darwin') {
+                // -o raw evita que CUPS filtre los bytes ESC/POS con el driver asignado (p.ej. Epson dot-matrix)
+                $comando = "lpr -P " . escapeshellarg($nombreImpresora) . " -o raw " . escapeshellarg($archivoTemp) . " 2>&1";
                 $resultado = shell_exec($comando);
                 
                 // lpr no devuelve salida si tiene éxito
@@ -817,8 +817,8 @@ class ImpresorTermica {
             // ═══════════════════════════════════════════════════════════
             // 🐧 LINUX - Usar CUPS (lpr)
             // ═══════════════════════════════════════════════════════════
-            elseif (strpos($os, 'linux') !== false) {
-                $comando = "lpr -P " . escapeshellarg($nombreImpresora) . " " . escapeshellarg($archivoTemp) . " 2>&1";
+            else {
+                $comando = "lpr -P " . escapeshellarg($nombreImpresora) . " -o raw " . escapeshellarg($archivoTemp) . " 2>&1";
                 $resultado = shell_exec($comando);
                 
                 $success = (empty($resultado) || stripos($resultado, 'error') === false);
@@ -838,7 +838,7 @@ class ImpresorTermica {
             'success' => $success,
             'mensaje' => $success ? 'Impresión enviada correctamente' : 'Error al imprimir',
             'salida' => $resultado,
-            'sistema' => $os,
+            'sistema' => PHP_OS_FAMILY,
             'impresora' => $nombreImpresora
         ];
     }

@@ -43,7 +43,6 @@ try {
         SELECT 
             m.id,
             m.nombre,
-            m.descripcion,
             (SELECT COUNT(*) 
              FROM ordenes o 
              WHERE o.mesa_id = m.id AND o.estado = 'abierta') as ordenes_abiertas,
@@ -53,9 +52,13 @@ try {
              WHERE o.mesa_id = m.id AND o.estado = 'abierta' 
              LIMIT 1) as mesero_nombre,
             (SELECT COUNT(*) 
-             FROM orden_items oi
-             INNER JOIN ordenes o ON oi.orden_id = o.id
-             WHERE o.mesa_id = m.id AND o.estado = 'abierta') as items_en_orden
+             FROM orden_productos op
+             INNER JOIN ordenes o ON op.orden_id = o.id
+             WHERE o.mesa_id = m.id AND o.estado = 'abierta') as items_en_orden,
+            (SELECT o.total 
+             FROM ordenes o 
+             WHERE o.mesa_id = m.id AND o.estado = 'abierta' 
+             ORDER BY o.id DESC LIMIT 1) as orden_total
         FROM mesas m
         ORDER BY m.nombre
     ";
@@ -78,10 +81,10 @@ try {
         $mesasProcesadas[] = [
             'id' => intval($mesa['id']),
             'nombre' => $mesa['nombre'],
-            'descripcion' => $mesa['descripcion'] ?? '',
             'estado' => $estado,
             'ordenes_abiertas' => $ordenesAbiertas,
             'items_en_orden' => intval($mesa['items_en_orden']),
+            'total' => $mesa['orden_total'] !== null ? floatval($mesa['orden_total']) : 0,
             'mesero_nombre' => $mesa['mesero_nombre'] ? trim($mesa['mesero_nombre']) : null
         ];
     }

@@ -1,20 +1,42 @@
 <?php
+// Carga variables desde .env (si existe) sin sobrescribir las ya definidas en el entorno
+$envFile = __DIR__ . '/.env';
+if (file_exists($envFile)) {
+    foreach (file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+        $line = trim($line);
+        if ($line === '' || $line[0] === '#' || strpos($line, '=') === false) {
+            continue;
+        }
+        [$key, $value] = explode('=', $line, 2);
+        $key = trim($key);
+        $value = trim(trim($value), "\"'");
+        if (getenv($key) === false) {
+            putenv("$key=$value");
+        }
+    }
+}
+
+function env($key, $default = null) {
+    $value = getenv($key);
+    return $value === false ? $default : $value;
+}
+
 // Configuración JWT
-define('JWT_SECRET_KEY', 'kalli_jaguar_pos_2025_secret_key_super_secure'); // CAMBIAR EN PRODUCCIÓN
+define('JWT_SECRET_KEY', env('JWT_SECRET_KEY', 'kalli_jaguar_pos_2025_secret_key_super_secure')); // Definir en .env en producción
 define('JWT_ALGORITHM', 'HS256');
 define('JWT_EXPIRATION_TIME', 8 * 60 * 60); // 8 horas
 define('JWT_REFRESH_TIME', 7 * 24 * 60 * 60); // 7 días para refresh
 
 // Configuración de la Base de Datos
-define('DB_HOST', 'localhost:3306');
-define('DB_NAME', 'KalliJaguarPOS');
-define('DB_USER', 'root');
-define('DB_PASS', 'root');
+define('DB_HOST', env('DB_HOST', 'localhost:8889'));
+define('DB_NAME', env('DB_NAME', 'kallijaguarpos'));
+define('DB_USER', env('DB_USER', 'root'));
+define('DB_PASS', env('DB_PASS', 'root'));
 
 // Configuración de la Aplicación
 define('APP_NAME', 'Kalli Jaguar POS');
-define('APP_URL', 'http://localhost/POS');
-define('APP_TIMEZONE', 'America/Mexico_City');
+define('APP_URL', env('APP_URL', 'http://localhost:8888/POSSystemKalli'));
+define('APP_TIMEZONE', env('APP_TIMEZONE', 'America/Mexico_City'));
 
 // Configuración de Sesiones
 define('SESSION_TIMEOUT', 8 * 60 * 60); // 8 horas
@@ -35,10 +57,7 @@ define('PUBLIC_ROUTES', [
     '/vendor/'
 ]);
 
-// Configuración de CORS
-define('CORS_ALLOWED_ORIGINS', [
-    'http://localhost:8888',
-    'http://localhost'
-]);
+// Configuración de CORS (lista separada por comas en CORS_ALLOWED_ORIGINS)
+define('CORS_ALLOWED_ORIGINS', array_map('trim', explode(',', env('CORS_ALLOWED_ORIGINS', 'http://localhost:8888,http://localhost,http://192.168.100.191:8888'))));
 
 date_default_timezone_set(APP_TIMEZONE);

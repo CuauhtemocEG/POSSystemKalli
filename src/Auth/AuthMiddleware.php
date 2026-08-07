@@ -162,7 +162,7 @@ class AuthMiddleware {
         }
         
         if ($redirect) {
-            header('Location: /POS/login.php');
+            header('Location: /POSSystemKalli/login.php');
             exit;
         }
         
@@ -185,7 +185,7 @@ class AuthMiddleware {
         }
         
         if ($redirect) {
-            header('Location: /POS/error.php?code=403');
+            header('Location: /POSSystemKalli/error.php?code=403');
             exit;
         }
         

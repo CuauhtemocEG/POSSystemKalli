@@ -627,7 +627,7 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
                             </div>
                             <?php endif; ?>
                             
-                            <form method="post" action="/POS/controllers/cerrar_orden.php" id="cerrar-orden-form">
+                            <form method="post" action="/POSSystemKalli/controllers/cerrar_orden.php" id="cerrar-orden-form">
                                 <input type="hidden" name="orden_id" value="<?= $orden['id'] ?>">
                                 <input type="hidden" name="mesa_id" value="<?= $mesa_id ?>">
                                 <button type="submit" class="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white py-3 rounded-xl font-bold transition-all shadow-lg hover:shadow-xl">
@@ -684,7 +684,7 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
                     </div>
                     <h3 class="text-white text-2xl font-bold mb-3">No hay orden abierta</h3>
                     <p class="text-slate-400 mb-6">Inicia una nueva orden para comenzar a agregar productos</p>
-                    <form method="post" action="/POS/controllers/nueva_orden.php">
+                    <form method="post" action="/POSSystemKalli/controllers/nueva_orden.php">
                         <input type="hidden" name="mesa_id" value="<?= $mesa_id ?>">
                         <button type="submit" class="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white py-4 px-8 rounded-xl font-bold shadow-lg hover:shadow-xl transition-all">
                             <i class="bi bi-plus-circle mr-2"></i>Abrir Nueva Orden
@@ -723,7 +723,7 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
         formData.append('aplicar', aplicar);
         formData.append('porcentaje', porcentaje);
         
-        fetch('/POS/controllers/actualizar_descuento_porcentaje.php', {
+        fetch('/POSSystemKalli/controllers/actualizar_descuento_porcentaje.php', {
             method: 'POST',
             body: formData
         })
@@ -873,7 +873,7 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
     /** 🔹 Cargar Categorías */
     function cargarCategorias() {
         // Anti-caché: siempre obtener categorías frescas
-        fetch('/POS/controllers/categorias.php?_=' + Date.now(), {
+        fetch('/POSSystemKalli/controllers/categorias.php?_=' + Date.now(), {
             cache: 'no-store',
             headers: {
                 'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -918,7 +918,7 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
         if (q === undefined) q = '';
 
         // Anti-caché: siempre obtener productos frescos
-        fetch('/POS/controllers/buscar_productos.php?cat_id=' + cat_id + '&q=' + encodeURIComponent(q) + '&_=' + Date.now(), {
+        fetch('/POSSystemKalli/controllers/buscar_productos.php?cat_id=' + cat_id + '&q=' + encodeURIComponent(q) + '&_=' + Date.now(), {
             cache: 'no-store',
             headers: {
                 'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -1129,7 +1129,7 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
             nota_adicional: notaAdicional
         });
         
-        fetch('/POS/controllers/newPos/agregar_producto_orden.php', {
+        fetch('/POSSystemKalli/controllers/newPos/agregar_producto_orden.php', {
                 method: 'POST',
                 body: formData,
                 headers: {
@@ -1171,7 +1171,7 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
                         console.log('🔄 Actualizando orden de mesa...');
                         
                         // Pre-fetch con timestamp para verificar datos frescos
-                        fetch('/POS/controllers/newPos/orden_actual.php?orden_id=' + ordenId + '&_=' + Date.now())
+                        fetch('/POSSystemKalli/controllers/newPos/orden_actual.php?orden_id=' + ordenId + '&_=' + Date.now())
                             .then(res => res.json())
                             .then(data => {
                                 console.log('✅ Datos actualizados:', data.items ? data.items.length : 0, 'items');
@@ -1213,7 +1213,7 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
                     }
                 });
                 
-                fetch('/POS/controllers/newPos/confirmar_productos.php', {
+                fetch('/POSSystemKalli/controllers/newPos/confirmar_productos.php', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded'
@@ -1278,7 +1278,7 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
                     }
                 });
                 
-                fetch('/POS/controllers/newPos/confirmar_productos.php', {
+                fetch('/POSSystemKalli/controllers/newPos/confirmar_productos.php', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded'
@@ -1828,7 +1828,7 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
             }
         });
 
-        fetch('/POS/controllers/newPos/solicitar_cancelacion.php', {
+        fetch('/POSSystemKalli/controllers/newPos/solicitar_cancelacion.php', {
                 method: 'POST',
                 body: new URLSearchParams({
                     orden_producto_id: ordenProductoId,
@@ -1870,7 +1870,7 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
                         console.log('🔄 Actualizando orden tras solicitud de cancelación...');
                         
                         // Pre-fetch con timestamp para datos frescos
-                        fetch('/POS/controllers/newPos/orden_actual.php?orden_id=' + ordenId + '&_=' + Date.now())
+                        fetch('/POSSystemKalli/controllers/newPos/orden_actual.php?orden_id=' + ordenId + '&_=' + Date.now())
                             .then(res => res.json())
                             .then(data => {
                                 console.log('✅ Orden actualizada después de cancelación');
@@ -1897,7 +1897,7 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
         const esPersonal = document.getElementById('esPersonal')?.checked ? 1 : 0;
         
         // Anti-caché: siempre obtener datos frescos
-        fetch('/POS/controllers/newPos/orden_actual.php?orden_id=' + ordenId + '&es_personal=' + esPersonal + '&_=' + Date.now(), {
+        fetch('/POSSystemKalli/controllers/newPos/orden_actual.php?orden_id=' + ordenId + '&es_personal=' + esPersonal + '&_=' + Date.now(), {
             cache: 'no-store',
             headers: {
                 'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -2278,7 +2278,7 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
                         let val = Math.max(1, parseInt(this.value));
                         this.classList.add('animate-pulse');
 
-                        fetch('/POS/controllers/newPos/actualizar_producto_orden.php', {
+                        fetch('/POSSystemKalli/controllers/newPos/actualizar_producto_orden.php', {
                             method: 'POST',
                             body: new URLSearchParams({
                                 producto_id: this.getAttribute('data-id'),
@@ -2312,7 +2312,7 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
                                 console.log('🔄 Actualizando orden tras cambio de cantidad...');
                                 
                                 // Pre-fetch con timestamp para datos frescos
-                                fetch('/POS/controllers/newPos/orden_actual.php?orden_id=' + ordenId + '&_=' + Date.now())
+                                fetch('/POSSystemKalli/controllers/newPos/orden_actual.php?orden_id=' + ordenId + '&_=' + Date.now())
                                     .then(res => res.json())
                                     .then(data => {
                                         console.log('✅ Orden actualizada:', data.items ? data.items.length : 0, 'items');
@@ -2532,7 +2532,7 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
                                 if (result.isConfirmed) {
                                     button.classList.add('animate-pulse');
 
-                                    fetch('/POS/controllers/newPos/actualizar_producto_orden.php', {
+                                    fetch('/POSSystemKalli/controllers/newPos/actualizar_producto_orden.php', {
                                         method: 'POST',
                                         body: new URLSearchParams({
                                             orden_producto_id: ordenProductoId,
@@ -2567,7 +2567,7 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
                                                 console.log('🔄 Actualizando orden tras eliminar producto...');
                                                 
                                                 // Pre-fetch con timestamp para datos frescos
-                                                fetch('/POS/controllers/newPos/orden_actual.php?orden_id=' + ordenId + '&_=' + Date.now())
+                                                fetch('/POSSystemKalli/controllers/newPos/orden_actual.php?orden_id=' + ordenId + '&_=' + Date.now())
                                                     .then(res => res.json())
                                                     .then(data => {
                                                         console.log('✅ Orden actualizada después de eliminar');
@@ -2638,7 +2638,7 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
                 }
                 
                 // Guardar estado en base de datos
-                fetch('/POS/controllers/actualizar_es_personal.php', {
+                fetch('/POSSystemKalli/controllers/actualizar_es_personal.php', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',
@@ -2699,7 +2699,7 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
                 console.log('🎁 Toggle promociones:', aplicar ? 'Activado' : 'Desactivado', 'para mesa', mesaId);
                 
                 // Guardar estado en base de datos
-                fetch('/POS/controllers/actualizar_mesa_promociones.php', {
+                fetch('/POSSystemKalli/controllers/actualizar_mesa_promociones.php', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -2861,7 +2861,7 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
                             }
                         });
 
-                        fetch('/POS/controllers/newPos/cancelar_orden.php', {
+                        fetch('/POSSystemKalli/controllers/newPos/cancelar_orden.php', {
                                 method: 'POST',
                                 body: new URLSearchParams({
                                     orden_id: ordenId
@@ -2905,7 +2905,7 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
                 e.preventDefault();
 
                 // Verificar si hay productos sin preparar antes de permitir cerrar
-                fetch('/POS/controllers/newPos/orden_actual.php?orden_id=' + ordenId)
+                fetch('/POSSystemKalli/controllers/newPos/orden_actual.php?orden_id=' + ordenId)
                     .then(function(r) {
                         if (!r.ok) {
                             throw new Error('Error HTTP: ' + r.status + ' ' + r.statusText);
@@ -3085,7 +3085,7 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
             });
 
             // Llamar al servidor para iniciar la división
-            fetch('/POS/controllers/division_cuentas.php?action=iniciar_division', {
+            fetch('/POSSystemKalli/controllers/division_cuentas.php?action=iniciar_division', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
@@ -3323,7 +3323,7 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
             });
 
             // Registrar pago en el servidor
-            fetch('/POS/controllers/division_cuentas.php?action=registrar_pago', {
+            fetch('/POSSystemKalli/controllers/division_cuentas.php?action=registrar_pago', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',

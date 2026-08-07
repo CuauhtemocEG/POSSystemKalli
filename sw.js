@@ -4,14 +4,14 @@ const DYNAMIC_CACHE = 'dynamic-v1.0.0';
 
 // Archivos estáticos que se cachean inmediatamente
 const STATIC_ASSETS = [
-  '/POS/',
-  '/POS/index.php',
-  '/POS/login.php',
-  '/POS/views/header.php',
-  '/POS/views/navbar.php',
-  '/POS/js/auth.js',
-  '/POS/js/pos.js',
-  '/POS/assets/css/bar.css',
+  '/POSSystemKalli/',
+  '/POSSystemKalli/index.php',
+  '/POSSystemKalli/login.php',
+  '/POSSystemKalli/views/header.php',
+  '/POSSystemKalli/views/navbar.php',
+  '/POSSystemKalli/js/auth.js',
+  '/POSSystemKalli/js/pos.js',
+  '/POSSystemKalli/assets/css/bar.css',
   // CDN assets importantes
   'https://cdn.tailwindcss.com',
   'https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap',
@@ -21,10 +21,10 @@ const STATIC_ASSETS = [
 
 // Archivos que se cachean dinámicamente
 const DYNAMIC_ASSETS = [
-  '/POS/views/',
-  '/POS/api/',
-  '/POS/controllers/',
-  '/POS/assets/img/'
+  '/POSSystemKalli/views/',
+  '/POSSystemKalli/api/',
+  '/POSSystemKalli/controllers/',
+  '/POSSystemKalli/assets/img/'
 ];
 
 // Install event - Cachear archivos estáticos
@@ -124,7 +124,7 @@ async function cacheFirst(request) {
     
     // 4. Fallback para páginas offline
     if (request.headers.get('accept').includes('text/html')) {
-      return caches.match('/POS/offline.html') || 
+      return caches.match('/POSSystemKalli/offline.html') || 
              new Response('App offline. Revisa tu conexión.', {
                status: 503,
                statusText: 'Service Unavailable'
@@ -209,8 +209,8 @@ async function doBackgroundSync() {
 self.addEventListener('push', event => {
   const options = {
     body: event.data ? event.data.text() : 'Nueva notificación de POS',
-    icon: '/POS/assets/icons/icon-192x192.png',
-    badge: '/POS/assets/icons/badge-72x72.png',
+    icon: '/POSSystemKalli/assets/icons/icon-192x192.png',
+    badge: '/POSSystemKalli/assets/icons/badge-72x72.png',
     vibrate: [100, 50, 100],
     data: {
       dateOfArrival: Date.now(),
@@ -220,12 +220,12 @@ self.addEventListener('push', event => {
       {
         action: 'explore',
         title: 'Ver',
-        icon: '/POS/assets/icons/checkmark.png'
+        icon: '/POSSystemKalli/assets/icons/checkmark.png'
       },
       {
         action: 'close',
         title: 'Cerrar',
-        icon: '/POS/assets/icons/xmark.png'
+        icon: '/POSSystemKalli/assets/icons/xmark.png'
       }
     ]
   };
@@ -241,7 +241,7 @@ self.addEventListener('notificationclick', event => {
   
   if (event.action === 'explore') {
     event.waitUntil(
-      clients.openWindow('/POS/')
+      clients.openWindow('/POSSystemKalli/')
     );
   }
 });

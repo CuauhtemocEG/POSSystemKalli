@@ -342,11 +342,6 @@
                         // Redirigir con timestamp para evitar caché
                         const timestamp = new Date().getTime();
                         window.location.href = 'index.php?t=' + timestamp;
-                        
-                        // Forzar recarga sin caché
-                        setTimeout(() => {
-                            window.location.reload(true);
-                        }, 100);
                     });
                 } else {
                     Swal.fire({

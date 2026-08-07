@@ -694,6 +694,7 @@ document.addEventListener('DOMContentLoaded', function() {
              data-mesa-id="<?= $mesa['id'] ?>"
              data-mesa-nombre="<?= htmlspecialchars($mesa['nombre']) ?>"
              data-orden-abierta="<?= $mesa['orden_abierta'] ?>"
+             data-orden-total="<?= $mesa['orden_total'] ?? 0 ?>"
              data-rotation="<?= $mesaRotation ?>"
              style="position: absolute;
                     left: <?= $mesaX ?>px;
@@ -1256,7 +1257,7 @@ document.addEventListener('visibilitychange', function() {
 <!-- JavaScript para el Layout Designer -->
 <script>
 // Configuración de rutas
-const BASE_URL = window.location.origin + '/KalliPOS/';
+const BASE_URL = window.location.origin + '/POSSystemKalli/';
 const CONTROLLER_URL = BASE_URL + 'controllers/guardar_layout_temp.php'; // Temporal - funciona sin auth
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -1945,7 +1946,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         // Hacer petición a API con anti-caché
-        fetch('/KalliPOS/api/estado_mesas.php?_=' + Date.now())
+        fetch('/POSSystemKalli/api/estado_mesas.php?_=' + Date.now())
         .then(response => response.json())
         .then(data => {
             if (!data.success) {
@@ -1997,6 +1998,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 if (estadoActual !== estadoNuevo) {
                     console.log(`🔄 Mesa "${mesaData.nombre}": ${estadoActual} → ${estadoNuevo}`);
+                    hayDiferencias = true;
+                }
+
+                // Verificar si cambió el total de la orden abierta (ej: se agregaron productos)
+                const totalActual = parseFloat(mesaElement.dataset.ordenTotal) || 0;
+                const totalNuevo = parseFloat(mesaData.total) || 0;
+
+                if (Math.abs(totalActual - totalNuevo) > 0.001) {
+                    console.log(`🔄 Mesa "${mesaData.nombre}": total ${totalActual} → ${totalNuevo}`);
                     hayDiferencias = true;
                 }
             });

@@ -139,16 +139,11 @@ function enviarAImpresora($rutaPDF, $impresora, $metodo, $ip = '', $puerto = '91
  * Impresión local (USB/Paralelo)
  */
 function imprimirLocal($rutaPDF, $impresora) {
-    $os = strtolower(PHP_OS);
-    
-    if (strpos($os, 'win') !== false) {
-        // Windows
+    // PHP_OS_FAMILY es más confiable que strpos($os,'win'): 'darwin' contiene 'win' como subcadena
+    if (PHP_OS_FAMILY === 'Windows') {
         $comando = "print /D:\"$impresora\" \"$rutaPDF\"";
-    } elseif (strpos($os, 'darwin') !== false) {
-        // macOS
-        $comando = "lp -d '$impresora' '$rutaPDF'";
     } else {
-        // Linux
+        // macOS y Linux
         $comando = "lp -d '$impresora' '$rutaPDF'";
     }
     
