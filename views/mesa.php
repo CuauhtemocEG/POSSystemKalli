@@ -428,6 +428,52 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
             height: 60px;
             padding: 0.75rem 1rem !important;
         }
+
+        /* 📱 Desactivar el modo kiosk (fullscreen sin scroll) solo en teléfonos:
+           el modo kiosk fijo/sin-scroll se conserva para tablets (>=768px) */
+        body, html {
+            overflow: auto !important;
+            height: auto;
+            min-height: 100vh;
+        }
+
+        .kiosk-container {
+            height: auto;
+            min-height: 100vh;
+            overflow: visible;
+        }
+
+        .kiosk-content {
+            overflow: visible;
+            padding-bottom: 1rem;
+        }
+
+        .kiosk-pos-grid {
+            height: auto;
+            max-height: none !important;
+            overflow: visible !important;
+        }
+
+        .kiosk-panel {
+            height: auto;
+            overflow: visible;
+        }
+
+        .kiosk-panel-content {
+            overflow: visible;
+        }
+
+        .kiosk-panel-content > .relative {
+            min-height: auto;
+        }
+
+        .orden-scroll-area,
+        .catalogo-scroll-area {
+            overflow-y: visible !important;
+            max-height: none;
+            height: auto;
+            -webkit-overflow-scrolling: auto;
+        }
     }
 
     /* 📐 Estado sin orden - centrado y responsive */

@@ -64,6 +64,6 @@ define('PUBLIC_ROUTES', [
 ]);
 
 // Configuración de CORS (lista separada por comas en CORS_ALLOWED_ORIGINS)
-define('CORS_ALLOWED_ORIGINS', array_map('trim', explode(',', env('CORS_ALLOWED_ORIGINS', 'http://localhost:8888,http://localhost,http://192.168.100.191:8888'))));
+define('CORS_ALLOWED_ORIGINS', array_map('trim', explode(',', env('CORS_ALLOWED_ORIGINS', 'http://localhost:8888,http://localhost,http://192.168.100.191:8888,https://localhost:8890,https://192.168.100.191:8890'))));
 
 date_default_timezone_set(APP_TIMEZONE);
