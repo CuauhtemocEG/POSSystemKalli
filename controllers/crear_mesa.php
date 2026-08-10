@@ -40,10 +40,6 @@ try {
                 throw new Exception('No se puede eliminar una mesa con órdenes abiertas');
             }
             
-            // Eliminar layout de la mesa si existe
-            $stmt = $pdo->prepare("DELETE FROM mesa_layouts WHERE mesa_id = ?");
-            $stmt->execute([$mesa_id]);
-            
             // Eliminar la mesa
             $stmt = $pdo->prepare("DELETE FROM mesas WHERE id = ?");
             $stmt->execute([$mesa_id]);
@@ -75,34 +71,6 @@ try {
             $stmt->execute([$nombre]);
             $mesa_id = $pdo->lastInsertId();
             
-            // Crear layout inicial con dimensiones estándar (igual que las existentes)
-            // Buscar una posición libre en el layout
-            $stmt = $pdo->query("SELECT MAX(posicion_x) as max_x, MAX(posicion_y) as max_y FROM mesa_layouts");
-            $layout_info = $stmt->fetch(PDO::FETCH_ASSOC);
-            
-            $pos_x = ($layout_info['max_x'] ?? 200) + 150; // Nueva posición a la derecha
-            $pos_y = $layout_info['max_y'] ?? 200;
-            
-            // Si se sale del área visible, empezar nueva fila
-            if ($pos_x > 800) {
-                $pos_x = 300;
-                $pos_y = ($layout_info['max_y'] ?? 200) + 150;
-            }
-            
-            // Insertar layout inicial con las mismas dimensiones que las mesas existentes
-            $stmt = $pdo->prepare("
-                INSERT INTO mesa_layouts (mesa_id, posicion_x, posicion_y, ancho, alto, rotacion, tipo_visual) 
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            ");
-            $stmt->execute([
-                $mesa_id,
-                $pos_x,     // Posición X calculada
-                $pos_y,     // Posición Y calculada
-                120,        // Ancho estándar
-                100,        // Alto estándar
-                0,          // Sin rotación inicial
-                'rectangular' // Tipo visual estándar
-            ]);
             
             echo json_encode([
                 'success' => true, 

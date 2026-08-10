@@ -127,7 +127,7 @@ function hasPermission($module, $action = 'ver') {
             'cocina' => ['ver'],
             'bar' => ['ver'],
             'desayunos' => ['ver'],
-            'configuracion' => [],
+            'configuracion' => ['ver','editar'],
             'usuarios' => []
         ],
         'Antojitos' => [
