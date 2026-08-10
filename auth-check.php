@@ -126,6 +126,18 @@ function hasPermission($module, $action = 'ver') {
             'reportes' => ['ver', 'exportar'],
             'cocina' => ['ver'],
             'bar' => ['ver'],
+            'desayunos' => ['ver', 'editar'],
+            'configuracion' => [],
+            'usuarios' => []
+        ],
+        'Antojitos' => [
+            'mesas' => [],
+            'ordenes' => [],
+            'productos' => [],
+            'reportes' => [],
+            'cocina' => [],
+            'desayunos' => ['ver', 'editar'],
+            'bar' => [],
             'configuracion' => [],
             'usuarios' => []
         ]

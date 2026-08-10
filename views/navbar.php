@@ -59,7 +59,7 @@ if (!isset($userInfo) || !$userInfo) {
         <?php if (hasPermission('promociones', 'ver')): ?>
           <a href="index.php?page=promociones"
             class="flex items-center px-3 py-2 text-sm font-medium text-gray-300 hover:text-white hover:bg-dark-700/50 rounded-lg transition-all duration-200">
-            <i class="bi bi-bag text-purple-400 mr-2"></i>
+            <i class="bi bi-cash-coin text-purple-400 mr-2"></i>
             Promociones
           </a>
         <?php endif; ?>
@@ -69,7 +69,7 @@ if (!isset($userInfo) || !$userInfo) {
           <a href="index.php?page=cocina"
             class="flex items-center px-3 py-2 text-sm font-medium text-gray-300 hover:text-white hover:bg-dark-700/50 rounded-lg transition-all duration-200">
             <i class="bi bi-fire text-orange-400 mr-2"></i>
-            Cocina
+            Pozole
           </a>
         <?php endif; ?>
 
@@ -78,7 +78,7 @@ if (!isset($userInfo) || !$userInfo) {
           <a href="index.php?page=bar"
             class="flex items-center px-3 py-2 text-sm font-medium text-gray-300 hover:text-white hover:bg-dark-700/50 rounded-lg transition-all duration-200">
             <i class="bi bi-cup-straw text-cyan-400 mr-2"></i>
-            Bar
+            Bebidas
           </a>
         <?php endif; ?>
 
@@ -86,7 +86,7 @@ if (!isset($userInfo) || !$userInfo) {
           <a href="index.php?page=desayunos"
             class="flex items-center px-3 py-2 text-sm font-medium text-gray-300 hover:text-white hover:bg-dark-700/50 rounded-lg transition-all duration-200">
             <i class="bi bi-egg-fried text-amber-400 mr-2"></i>
-            Desayunos
+            Antojitos
           </a>
         <?php endif; ?>
 
