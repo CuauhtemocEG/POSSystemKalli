@@ -773,8 +773,16 @@ class ImpresorTermica {
      */
     public function imprimir($nombreImpresora) {
         // Crear archivo temporal
-        $archivoTemp = tempnam(sys_get_temp_dir(), 'ticket_');
-        file_put_contents($archivoTemp, $this->contenido);
+        $archivoTemp = tempnam('/tmp', 'kalli_ticket_');
+        if ($archivoTemp === false || file_put_contents($archivoTemp, $this->contenido) === false) {
+            return [
+                'success' => false,
+                'mensaje' => 'No se pudo crear el archivo temporal de impresión',
+                'salida' => 'El proceso PHP no tiene permisos para escribir en /tmp',
+                'sistema' => PHP_OS_FAMILY,
+                'impresora' => $nombreImpresora
+            ];
+        }
         
         $resultado = '';
         $success = false;
