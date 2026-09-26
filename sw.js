@@ -84,46 +84,84 @@ self.addEventListener('fetch', event => {
   if (url.protocol === 'chrome-extension:') {
     return;
   }
+
+  // No cachear páginas HTML ni endpoints dinámicos; deben ser frescos siempre
+  if (shouldBypassCache(request)) {
+    event.respondWith(networkFirst(request));
+    return;
+  }
   
-  event.respondWith(
-    cacheFirst(request)
-  );
+  // Solo cachear assets estáticos y recursos externos
+  event.respondWith(cacheFirst(request));
 });
 
-// Estrategia Cache First con Network Fallback
+function shouldBypassCache(request) {
+  const url = new URL(request.url);
+  const accept = request.headers.get('accept') || '';
+
+  return request.mode === 'navigate' ||
+    accept.includes('text/html') ||
+    url.pathname.includes('/api/') ||
+    url.pathname.includes('/controllers/') ||
+    url.pathname.includes('/auth/') ||
+    url.pathname.endsWith('.php');
+}
+
+// Estrategia Network First para páginas y APIs dinámicas
+async function networkFirst(request) {
+  const url = new URL(request.url);
+
+  try {
+    const networkResponse = await fetch(request, { cache: 'no-store' });
+    if (networkResponse && networkResponse.ok) {
+      return networkResponse;
+    }
+  } catch (error) {
+    console.error('❌ Network first failed:', url.pathname, error);
+  }
+
+  const cachedResponse = await caches.match(request);
+  if (cachedResponse) {
+    return cachedResponse;
+  }
+
+  if ((request.headers.get('accept') || '').includes('text/html')) {
+    return caches.match('/POSSystemKalli/offline.html') ||
+      new Response('App offline. Revisa tu conexión.', {
+        status: 503,
+        statusText: 'Service Unavailable'
+      });
+  }
+
+  return new Response('No disponible', { status: 503, statusText: 'Service Unavailable' });
+}
+
+// Estrategia Cache First con Network Fallback para archivos estáticos
 async function cacheFirst(request) {
   const url = new URL(request.url);
   
   try {
-    // 1. Buscar en caché primero
     const cachedResponse = await caches.match(request);
     if (cachedResponse) {
       console.log('📦 Cache hit:', url.pathname);
-      
-      // Si es un archivo estático, actualizar en segundo plano
       if (isStaticAsset(request)) {
         updateCache(request);
       }
-      
       return cachedResponse;
     }
     
-    // 2. Si no está en caché, buscar en red
     console.log('🌐 Network request:', url.pathname);
-    const networkResponse = await fetch(request);
+    const networkResponse = await fetch(request, { cache: 'no-store' });
     
-    // 3. Cachear la respuesta si es exitosa
     if (networkResponse.ok) {
       await updateCache(request, networkResponse.clone());
     }
     
     return networkResponse;
-    
   } catch (error) {
     console.error('❌ Fetch error:', error);
     
-    // 4. Fallback para páginas offline
-    if (request.headers.get('accept').includes('text/html')) {
+    if ((request.headers.get('accept') || '').includes('text/html')) {
       return caches.match('/POSSystemKalli/offline.html') || 
              new Response('App offline. Revisa tu conexión.', {
                status: 503,
@@ -131,8 +169,7 @@ async function cacheFirst(request) {
              });
     }
     
-    // Fallback para imágenes
-    if (request.headers.get('accept').includes('image')) {
+    if ((request.headers.get('accept') || '').includes('image')) {
       return new Response(
         '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><rect width="200" height="200" fill="#f3f4f6"/><text x="100" y="100" text-anchor="middle" fill="#6b7280" font-family="Arial" font-size="14">Imagen no disponible</text></svg>',
         { headers: { 'Content-Type': 'image/svg+xml' } }
@@ -146,6 +183,9 @@ async function cacheFirst(request) {
 // Verificar si es un archivo estático
 function isStaticAsset(request) {
   const url = new URL(request.url);
+  if (url.pathname.includes('/api/') || url.pathname.includes('/controllers/') || url.pathname.includes('/auth/')) {
+    return false;
+  }
   return STATIC_ASSETS.some(asset => url.pathname.includes(asset)) ||
          url.hostname !== location.hostname; // CDN assets
 }
@@ -162,7 +202,7 @@ async function updateCache(request, response = null) {
       await cache.put(request, response);
       console.log('💾 Cached:', url.pathname);
     } else {
-      const networkResponse = await fetch(request);
+      const networkResponse = await fetch(request, { cache: 'no-store' });
       if (networkResponse.ok) {
         await cache.put(request, networkResponse.clone());
         console.log('💾 Updated cache:', url.pathname);

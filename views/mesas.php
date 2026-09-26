@@ -839,8 +839,15 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log('🔄 Verificando estado actual de mesas...');
         }
         
-        // Hacer petición a API con anti-caché
-        fetch('/POSSystemKalli/api/estado_mesas.php?_=' + Date.now())
+        // Hacer petición a API con anti-caché y sin cache de navegador
+        fetch('/POSSystemKalli/api/estado_mesas.php?_=' + Date.now(), {
+            cache: 'no-store',
+            headers: {
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0'
+            }
+        })
         .then(response => response.json())
         .then(data => {
             if (!data.success) {

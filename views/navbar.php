@@ -234,6 +234,32 @@ if (!isset($userInfo) || !$userInfo) {
 
 <script>
   document.addEventListener('DOMContentLoaded', function() {
+    const forceFreshNavigation = (link) => {
+      const href = link.getAttribute('href') || '';
+      if (!href || href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('http')) {
+        return;
+      }
+
+      link.addEventListener('click', function(e) {
+        const url = new URL(this.href, window.location.href);
+        url.searchParams.set('_', Date.now());
+        e.preventDefault();
+        window.location.href = url.toString();
+      });
+    };
+
+    document.querySelectorAll('a[href]').forEach(forceFreshNavigation);
+
+    // Evitar que el navegador restaure la vista desde Back/Forward Cache con HTML viejo
+    window.addEventListener('pageshow', function(event) {
+      if (event.persisted) {
+        const url = new URL(window.location.href);
+        if (url.searchParams.get('page') === 'mesas' || url.searchParams.get('page') === 'ordenes') {
+          window.location.reload();
+        }
+      }
+    });
+
     // Mobile menu toggle
     const mobileMenuButton = document.getElementById('mobile-menu-button');
     const mobileMenu = document.getElementById('mobile-menu');

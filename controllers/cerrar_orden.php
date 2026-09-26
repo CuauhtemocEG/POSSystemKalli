@@ -908,7 +908,8 @@ try {
         }
     }
     
-    // Redirección exitosa
+    // Redirección exitosa con cache-buster para evitar HTML viejo del navegador
+    $params['_'] = time();
     header('Location: ../index.php?page=mesas&' . http_build_query($params));
     exit;
     
@@ -922,8 +923,8 @@ try {
         }
     }
     
-    // Redirección con error
-    header('Location: ../index.php?page=mesas&error=' . urlencode($e->getMessage()));
+    // Redirección con error y cache-buster
+    header('Location: ../index.php?page=mesas&error=' . urlencode($e->getMessage()) . '&_=' . time());
     exit;
 }
 ?>
