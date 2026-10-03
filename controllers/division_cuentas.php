@@ -49,12 +49,34 @@ try {
             }
             
             // Verificar que la orden existe y está abierta
-            $stmt = $pdo->prepare("SELECT id, total, subtotal FROM ordenes WHERE id = ? AND estado = 'abierta'");
+            $stmt = $pdo->prepare("SELECT id, total, subtotal, division_cuenta, numero_divisiones FROM ordenes WHERE id = ? AND estado = 'abierta'");
             $stmt->execute([$orden_id]);
             $orden = $stmt->fetch();
             
             if (!$orden) {
                 throw new Exception('Orden no encontrada o ya está cerrada');
+            }
+
+            // Si ya hay pagos registrados, reanudar sin reiniciar la división
+            if ($orden['division_cuenta']) {
+                $stmt = $pdo->prepare("SELECT numero_pago, monto, metodo_pago FROM pagos_parciales WHERE orden_id = ? ORDER BY numero_pago ASC");
+                $stmt->execute([$orden_id]);
+                $pagos_previos = $stmt->fetchAll();
+                if (count($pagos_previos) > 0) {
+                    $pagado = array_sum(array_column($pagos_previos, 'monto'));
+                    ob_clean();
+                    echo json_encode([
+                        'success' => true,
+                        'reanudado' => true,
+                        'message' => 'División en curso reanudada',
+                        'total_orden' => $orden['total'],
+                        'numero_divisiones' => intval($orden['numero_divisiones']),
+                        'total_pagado' => $pagado,
+                        'pagos' => $pagos_previos,
+                        'proximo_numero' => count($pagos_previos) + 1
+                    ]);
+                    break;
+                }
             }
             
             // 🎁 Recalcular total incluyendo promociones/descuentos antes de iniciar la división
@@ -277,6 +299,73 @@ try {
             ]);
             break;
         
+        /**
+         * Anular un pago parcial (solo administrador/cajero, orden abierta, con motivo)
+         * POST: orden_id, pago_id, motivo
+         */
+        case 'anular_pago':
+            $orden_id = intval($_POST['orden_id'] ?? 0);
+            $pago_id = intval($_POST['pago_id'] ?? 0);
+            $motivo = trim($_POST['motivo'] ?? '');
+            $usuario_id = $_SESSION['user_id'] ?? null;
+            $rol = $_SESSION['role'] ?? '';
+
+            if (!in_array($rol, ['administrador', 'cajero'], true)) {
+                http_response_code(403);
+                throw new Exception('No tiene permisos para anular pagos');
+            }
+            if ($orden_id <= 0 || $pago_id <= 0) {
+                throw new Exception('Datos inválidos');
+            }
+            if (mb_strlen($motivo) < 5) {
+                throw new Exception('Indique el motivo de la anulación (mínimo 5 caracteres)');
+            }
+
+            $pdo->beginTransaction();
+            try {
+                $stmt = $pdo->prepare("SELECT id, division_cuenta FROM ordenes WHERE id = ? AND estado = 'abierta' FOR UPDATE");
+                $stmt->execute([$orden_id]);
+                $orden = $stmt->fetch();
+                if (!$orden || !$orden['division_cuenta']) {
+                    throw new Exception('La orden no está abierta o no tiene división activa');
+                }
+
+                $stmt = $pdo->prepare("SELECT * FROM pagos_parciales WHERE id = ? AND orden_id = ? FOR UPDATE");
+                $stmt->execute([$pago_id, $orden_id]);
+                $pago = $stmt->fetch();
+                if (!$pago) {
+                    throw new Exception('Pago no encontrado');
+                }
+
+                $pdo->prepare("DELETE FROM pagos_parciales WHERE id = ?")->execute([$pago_id]);
+
+                // Mantener numeración consecutiva
+                $stmt = $pdo->prepare("SELECT id FROM pagos_parciales WHERE orden_id = ? ORDER BY numero_pago ASC, id ASC");
+                $stmt->execute([$orden_id]);
+                $n = 1;
+                $upd = $pdo->prepare("UPDATE pagos_parciales SET numero_pago = ? WHERE id = ?");
+                foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $id_restante) {
+                    $upd->execute([$n++, $id_restante]);
+                }
+
+                $nuevo_estado = ($n > 1) ? 'parcial' : 'pendiente';
+                $pdo->prepare("UPDATE ordenes SET estado_division = ? WHERE id = ?")->execute([$nuevo_estado, $orden_id]);
+
+                $detalle = "Pago parcial ANULADO: $" . number_format($pago['monto'], 2) . " ({$pago['metodo_pago']}), "
+                         . "registrado el {$pago['pagado_en']}. Motivo: {$motivo}";
+                $pdo->prepare("INSERT INTO historial_ordenes (orden_id, accion, detalle, usuario_id) VALUES (?, 'PAGO_PARCIAL_ANULADO', ?, ?)")
+                    ->execute([$orden_id, $detalle, $usuario_id]);
+
+                $pdo->commit();
+            } catch (Exception $e) {
+                $pdo->rollBack();
+                throw $e;
+            }
+
+            ob_clean();
+            echo json_encode(['success' => true, 'message' => 'Pago anulado']);
+            break;
+
         /**
          * Cancelar división de cuenta (volver a pago único)
          * POST: orden_id

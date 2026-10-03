@@ -2,17 +2,12 @@
 // Este archivo es incluido desde index.php, por lo que las rutas son relativas al directorio raíz
 // $pdo y $userInfo ya están disponibles desde index.php
 
-$orden_id = intval($_GET['id'] ?? 0);
-$orden = $pdo->prepare("
-    SELECT o.*, m.nombre AS mesa_nombre
-    FROM ordenes o
-    JOIN mesas m ON m.id = o.mesa_id
-    WHERE o.id = ?
-");
-$orden->execute([$orden_id]);
-$orden = $orden->fetch(PDO::FETCH_ASSOC);
+require_once __DIR__ . '/../includes/OrdenDetalle.php';
 
-if (!$orden) {
+$orden_id = intval($_GET['id'] ?? 0);
+$detalle = obtenerDetalleOrden($pdo, $orden_id);
+
+if (!$detalle) {
   echo "<div class='bg-red-500/10 border border-red-500/20 text-red-400 px-6 py-4 rounded-xl mb-6'>
           <i class='bi bi-exclamation-triangle mr-2'></i>
           Orden no encontrada
@@ -20,112 +15,20 @@ if (!$orden) {
   exit;
 }
 
-// Productos - Incluir item_index y variedades para auditoría detallada
-$stmt_productos = $pdo->prepare("
-    SELECT op.id, 
-           p.nombre, 
-           op.cantidad, 
-           COALESCE(op.preparado, 0) as preparado, 
-           COALESCE(op.cancelado, 0) as cancelado,
-           COALESCE(op.pendiente_cancelacion, 0) as pendiente_cancelacion,
-           COALESCE(op.item_index, 1) as item_index,
-           op.producto_id,
-           p.precio
-    FROM orden_productos op
-    JOIN productos p ON op.producto_id = p.id
-    WHERE op.orden_id = ?
-    ORDER BY p.nombre, op.item_index
-");
-$stmt_productos->execute([$orden_id]);
-$productos_raw = $stmt_productos->fetchAll(PDO::FETCH_ASSOC);
-
-// Obtener variedades para cada producto
-$productos = [];
-foreach ($productos_raw as $prod) {
-  // Obtener variedades de este item específico (si existen)
-  $stmtVariedades = $pdo->prepare("
-    SELECT grupo_nombre, opcion_nombre, precio_adicional
-    FROM orden_producto_variedades
-    WHERE orden_id = ? AND producto_id = ? AND item_index = ?
-    ORDER BY id
-  ");
-  $stmtVariedades->execute([$orden_id, $prod['producto_id'], $prod['item_index']]);
-  $variedades = $stmtVariedades->fetchAll(PDO::FETCH_ASSOC);
-
-  // Añadir variedades al producto
-  $prod['variedades'] = $variedades;
-  $productos[] = $prod;
-}
-
-$subtotal = 0;
-$total_cancelado = 0;
-$productos_activos = 0;
-$productos_cancelados = 0;
-
-foreach ($productos as $prod) {
-    $cantidad = intval($prod['cantidad']);
-    $cancelado = intval($prod['cancelado']);
-    $pendiente_cancelacion = intval($prod['pendiente_cancelacion']);
-    $precio = floatval($prod['precio']);
-    
-    // Sumar precio de variedades si existen
-    if (!empty($prod['variedades'])) {
-        foreach ($prod['variedades'] as $variedad) {
-            $precio += floatval($variedad['precio_adicional']);
-        }
-    }
-    
-    // Calcular cantidad activa (no cancelada ni pendiente de cancelación)
-    $cantidad_activa = $cantidad - $cancelado - $pendiente_cancelacion;
-    
-    // Subtotal solo de productos activos
-    $subtotal += $precio * $cantidad_activa;
-    $productos_activos += $cantidad_activa;
-    
-    // Total cancelado (productos ya cancelados)
-    $total_cancelado += $precio * $cancelado;
-    $productos_cancelados += $cancelado;
-}
-
-// Obtener promociones aplicadas a esta orden
-try {
-    $stmtPromociones = $pdo->prepare("
-        SELECT 
-            pa.id,
-            pa.promocion_id,
-            p.nombre as nombre_promocion,
-            p.tipo as tipo_descuento,
-            p.valor as valor_descuento,
-            pa.descuento_aplicado,
-            pa.aplicado_at as aplicada_en
-        FROM promociones_aplicadas pa
-        JOIN promociones p ON p.id = pa.promocion_id
-        WHERE pa.orden_id = ?
-        ORDER BY pa.aplicado_at ASC
-    ");
-    $stmtPromociones->execute([$orden_id]);
-    $promociones_aplicadas = $stmtPromociones->fetchAll(PDO::FETCH_ASSOC);
-} catch (PDOException $e) {
-    // Si la tabla no existe, continuar sin promociones
-    $promociones_aplicadas = [];
-}
-
-// Calcular descuento total de promociones
-$descuento = 0;
-foreach ($promociones_aplicadas as $promo) {
-    $descuento += floatval($promo['descuento_aplicado']);
-}
-
-$total = $subtotal - $descuento;
-
-// Actualizar el total en la base de datos si es diferente al calculado
-if (isset($orden['total']) && abs($orden['total'] - $total) > 0.01) {
-    $update_total = $pdo->prepare("UPDATE ordenes SET total = ? WHERE id = ?");
-    $update_total->execute([$total, $orden_id]);
-    
-    // Actualizar el array orden para mostrar el total correcto
-    $orden['total'] = $total;
-}
+$orden = $detalle['orden'];
+$productos = $detalle['productos'];
+$promociones_aplicadas = $detalle['promociones'];
+$pagos_parciales = $detalle['pagos'];
+$subtotal = $detalle['subtotal'];
+$total_cancelado = $detalle['total_cancelado'];
+$productos_activos = $detalle['productos_activos'];
+$productos_cancelados = $detalle['productos_cancelados'];
+$descuento = $detalle['descuento_promos'];
+$descuento_pct = $detalle['descuento_pct'];
+$descuento_pct_valor = $detalle['descuento_pct_valor'];
+$ajuste = $detalle['ajuste'];
+$total = $detalle['total'];
+$ordenCerrada = $orden['estado'] !== 'abierta';
 ?>
 
 <!-- Action Bar -->
@@ -166,17 +69,7 @@ if (isset($orden['total']) && abs($orden['total'] - $total) > 0.01) {
     <div class="space-y-2">
       <label class="text-sm font-medium text-gray-400">Mesero</label>
       <p class="text-lg font-semibold text-blue-300">
-        <?php
-        // Mostrar el nombre del mesero si existe
-        if (!empty($orden['usuario_id'])) {
-          $stmtMesero = $pdo->prepare("SELECT nombre_completo FROM usuarios WHERE id = ?");
-          $stmtMesero->execute([$orden['usuario_id']]);
-          $mesero = $stmtMesero->fetchColumn();
-          echo $mesero ? htmlspecialchars($mesero) : '<span class=\'text-gray-400\'>Sin asignar</span>';
-        } else {
-          echo '<span class=\'text-gray-400\'>Sin asignar</span>';
-        }
-        ?>
+        <?= !empty($orden['mesero_nombre']) ? htmlspecialchars($orden['mesero_nombre']) : '<span class=\'text-gray-400\'>Sin asignar</span>' ?>
       </p>
     </div>
     
@@ -215,6 +108,25 @@ if (isset($orden['total']) && abs($orden['total'] - $total) > 0.01) {
       <label class="text-sm font-medium text-gray-400">Fecha de Creación</label>
       <p class="text-lg font-semibold text-white"><?= date('d/m/Y H:i', strtotime($orden['creada_en'])) ?></p>
     </div>
+
+    <?php if ($ordenCerrada): ?>
+    <div class="space-y-2">
+      <label class="text-sm font-medium text-gray-400">Fecha de Cierre</label>
+      <p class="text-lg font-semibold text-white"><?= !empty($orden['cerrada_en']) ? date('d/m/Y H:i', strtotime($orden['cerrada_en'])) : '-' ?></p>
+    </div>
+
+    <div class="space-y-2">
+      <label class="text-sm font-medium text-gray-400">Cobrada por</label>
+      <p class="text-lg font-semibold text-white"><?= !empty($orden['mesero_nombre']) ? htmlspecialchars($orden['mesero_nombre']) : '<span class="text-gray-400">-</span>' ?></p>
+    </div>
+
+    <div class="space-y-2">
+      <label class="text-sm font-medium text-gray-400">Método de Pago</label>
+      <p class="text-lg font-semibold text-white">
+        <?= empty($pagos_parciales) ? htmlspecialchars(textoMetodoPago($orden['metodo_pago'])) : 'Pago dividido (' . count($pagos_parciales) . ')' ?>
+      </p>
+    </div>
+    <?php endif; ?>
   </div>
 </div>
 
@@ -277,6 +189,13 @@ if (isset($orden['total']) && abs($orden['total'] - $total) > 0.01) {
                       <?php endif; ?>
                     </div>
                   <?php endforeach; ?>
+                </div>
+              <?php endif; ?>
+
+              <?php if ($prod['nota_adicional'] !== ''): ?>
+                <div class="mt-2 pl-3 border-l-2 border-yellow-500/50 text-xs text-yellow-200 flex items-start gap-1">
+                  <i class="bi bi-sticky text-yellow-400 mt-0.5"></i>
+                  <span class="italic"><?= htmlspecialchars($prod['nota_adicional']) ?></span>
                 </div>
               <?php endif; ?>
             </td>
@@ -366,17 +285,7 @@ if (isset($orden['total']) && abs($orden['total'] - $total) > 0.01) {
               <span class="text-gray-400">
                 Tipo: 
                 <span class="text-blue-300 font-medium">
-                  <?php
-                  $tipo_texto = match($promo['tipo_descuento']) {
-                    'descuento_porcentaje' => $promo['valor_descuento'] . '% de descuento',
-                    'descuento_fijo' => '$' . number_format($promo['valor_descuento'], 2) . ' de descuento',
-                    'descuento_personal' => $promo['valor_descuento'] . '% descuento personal',
-                    '2x1' => '2x1 en productos seleccionados',
-                    '3x2' => '3x2 en productos seleccionados',
-                    default => 'Descuento especial'
-                  };
-                  echo $tipo_texto;
-                  ?>
+                  <?= htmlspecialchars(textoTipoPromocion($promo)) ?>
                 </span>
               </span>
             </div>
@@ -403,6 +312,47 @@ if (isset($orden['total']) && abs($orden['total'] - $total) > 0.01) {
         </span>
       </div>
     </div>
+  </div>
+</div>
+<?php endif; ?>
+
+<!-- Pagos de cuenta dividida -->
+<?php if (!empty($pagos_parciales)): ?>
+<div class="bg-dark-800/50 border border-dark-700/50 rounded-2xl overflow-hidden mb-8">
+  <div class="p-6 border-b border-dark-700/50">
+    <h2 class="text-xl font-montserrat-semibold text-white flex items-center">
+      <i class="bi bi-people-fill mr-2 text-cyan-400"></i>
+      Pagos de la Cuenta Dividida
+    </h2>
+  </div>
+  <div class="overflow-x-auto">
+    <table class="w-full">
+      <thead class="bg-dark-700/50">
+        <tr>
+          <th class="px-6 py-3 text-center text-xs font-medium text-gray-400 uppercase">No.</th>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Método</th>
+          <th class="px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase">Monto</th>
+          <th class="px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase">Recibido</th>
+          <th class="px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase">Cambio</th>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Registró</th>
+          <th class="px-6 py-3 text-center text-xs font-medium text-gray-400 uppercase">Hora</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-dark-700/50">
+        <?php foreach ($pagos_parciales as $pago): ?>
+          <?php $esEfectivo = $pago['metodo_pago'] === 'efectivo' && $pago['dinero_recibido'] !== null; ?>
+          <tr class="hover:bg-dark-700/30 transition-colors duration-200">
+            <td class="px-6 py-3 text-center text-white font-semibold"><?= intval($pago['numero_pago']) ?></td>
+            <td class="px-6 py-3 text-gray-200"><?= htmlspecialchars(textoMetodoPago($pago['metodo_pago'])) ?></td>
+            <td class="px-6 py-3 text-right text-green-400 font-semibold">$<?= number_format($pago['monto'], 2) ?></td>
+            <td class="px-6 py-3 text-right text-gray-300"><?= $esEfectivo ? '$' . number_format($pago['dinero_recibido'], 2) : '-' ?></td>
+            <td class="px-6 py-3 text-right text-gray-300"><?= $esEfectivo ? '$' . number_format($pago['cambio'], 2) : '-' ?></td>
+            <td class="px-6 py-3 text-gray-300"><?= htmlspecialchars($pago['usuario_nombre'] ?? '-') ?></td>
+            <td class="px-6 py-3 text-center text-gray-400 text-sm"><?= date('d/m/Y H:i', strtotime($pago['pagado_en'])) ?></td>
+          </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table>
   </div>
 </div>
 <?php endif; ?>
@@ -441,9 +391,24 @@ if (isset($orden['total']) && abs($orden['total'] - $total) > 0.01) {
       <span class="text-lg font-semibold text-white">$<?= number_format($descuento, 2) ?></span>
     </div>
     <?php endif; ?>
-    
 
-    
+    <?php if ($descuento_pct > 0): ?>
+    <div class="flex justify-between items-center py-2 bg-orange-500/5 -mx-2 px-2 rounded-lg">
+      <span class="text-orange-300 flex items-center">
+        <i class="bi bi-percent mr-2"></i>
+        Descuento manual (<?= rtrim(rtrim(number_format($descuento_pct_valor, 2), '0'), '.') ?>%):
+      </span>
+      <span class="text-lg font-semibold text-orange-400">-$<?= number_format($descuento_pct, 2) ?></span>
+    </div>
+    <?php endif; ?>
+
+    <?php if ($ajuste > 0): ?>
+    <div class="flex justify-between items-center py-2">
+      <span class="text-gray-400">Otros descuentos / ajustes:</span>
+      <span class="text-lg font-semibold text-gray-300">-$<?= number_format($ajuste, 2) ?></span>
+    </div>
+    <?php endif; ?>
+
     <?php if ($productos_cancelados > 0): ?>
     <div class="bg-red-900/20 border border-red-600/30 rounded-lg p-3 mb-4">
       <div class="flex items-center justify-between text-sm">

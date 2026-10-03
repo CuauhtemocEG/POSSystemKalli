@@ -5,7 +5,7 @@ $pdo = conexion();
 // Obtener productos normales (disponibles para preparar)
 $detalles = $pdo->query(
     "SELECT m.nombre AS mesa, m.id AS mesa_id, op.id AS op_id, p.id AS producto_id, p.nombre AS producto, 
-            o.id AS orden_id, COALESCE(op.item_index, 1) as item_index,
+            o.id AS orden_id, o.codigo AS orden_codigo, COALESCE(op.item_index, 1) as item_index,
             COALESCE(op.cantidad, 0) as cantidad, 
             COALESCE(op.preparado, 0) as preparado, 
             COALESCE(op.cancelado, 0) as cancelado, 
@@ -25,7 +25,7 @@ $detalles = $pdo->query(
      UNION ALL
      
      SELECT m.nombre AS mesa, m.id AS mesa_id, op.id AS op_id, p.id AS producto_id, p.nombre AS producto,
-            o.id AS orden_id, COALESCE(op.item_index, 1) as item_index,
+            o.id AS orden_id, o.codigo AS orden_codigo, COALESCE(op.item_index, 1) as item_index,
             COALESCE(op.cantidad, 0) as cantidad, 
             COALESCE(op.preparado, 0) as preparado, 
             COALESCE(op.cancelado, 0) as cancelado, 

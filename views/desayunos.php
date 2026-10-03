@@ -256,6 +256,8 @@ function cargarDesayunos(showLoading = true) {
             nombre: item.mesa,
             productos: [],
             op_id: item.op_id,
+            orden_id: item.orden_id,
+            orden_codigo: item.orden_codigo,
             prioridad: item.op_id, // Menor op_id = mayor prioridad (llegó primero)
             tiempo_orden: item.op_id // Para referencia
           };
@@ -363,7 +365,7 @@ function cargarDesayunos(showLoading = true) {
                       </div>
                       <div>
                         <h3 class="text-xl font-bold text-white">${nombreMesa}</h3>
-                        <p class="text-xs text-gray-400">Orden #${mesa.op_id}</p>
+                        <p class="text-xs text-gray-400">Orden #${mesa.orden_codigo || mesa.orden_id}</p>
                       </div>
                     </div>
                     
@@ -376,6 +378,7 @@ function cargarDesayunos(showLoading = true) {
                         ${totalFaltan > 0 ? `<span class="text-sm text-emerald-400 font-semibold animate-pulse"><i class="bi bi-clock mr-1.5"></i>${totalFaltan} pendientes</span>` : ''}
                       </div>
                       
+                      ${totalFaltan > 0 ? `<button type="button" onclick="marcarTodoListoDesayunos(${mesa.orden_id}, '${mesa.orden_codigo || mesa.orden_id}')" class="px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold rounded-lg transition-all text-sm shadow-lg"><i class="bi bi-check-all mr-1.5"></i>Marcar como listo todo</button>` : ''}
                       <div class="status-badge px-4 py-2 bg-${statusColor}-500/20 border border-${statusColor}-500/30 rounded-full">
                         <div class="flex items-center space-x-2">
                           <i class="bi bi-${statusIcon} text-${statusColor}-400"></i>
@@ -628,6 +631,38 @@ function cargarDesayunos(showLoading = true) {
         </div>
       `;
     });
+}
+
+function marcarTodoListoDesayunos(ordenId, codigo) {
+  Swal.fire({
+    title: 'Marcar todo como listo',
+    text: 'Se marcarán todos los desayunos pendientes de la orden #' + codigo + '.',
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonText: 'Sí, marcar todo',
+    cancelButtonText: 'Cancelar',
+    confirmButtonColor: '#10b981',
+    background: '#1f2937',
+    color: '#ffffff'
+  }).then(result => {
+    if (!result.isConfirmed) return;
+    fetch('controllers/marcar_todo_listo.php', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+      body: `orden_id=${encodeURIComponent(ordenId)}&categoria=desayunos`
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.status !== 'ok') {
+        Swal.fire({ title: 'Error', text: data.msg || 'No se pudo marcar', icon: 'error', background: '#1f2937', color: '#ffffff', confirmButtonColor: '#ef4444' });
+      }
+      isUpdatingDesayunos = false;
+      cargarDesayunos(false);
+    })
+    .catch(() => {
+      Swal.fire({ title: 'Error', text: 'Error de conexión', icon: 'error', background: '#1f2937', color: '#ffffff', confirmButtonColor: '#ef4444' });
+    });
+  });
 }
 
 function mostrarAlertaCancelacionesDesayunos(productos) {

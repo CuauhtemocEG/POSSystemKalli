@@ -543,7 +543,7 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
                         
                         <!-- Totales fijos -->
                         <div class="kiosk-totales-section">
-                            <?php if ($esAdministrador || hasPermission('ordenes', 'editar')): ?>
+                            <?php if ($esAdministrador || $userInfo['rol'] === 'cajero' || hasPermission('ordenes', 'editar')): ?>
                             <!-- Accordion de Promociones y Descuentos -->
                             <div class="mb-3 bg-gradient-to-br from-slate-800/60 to-slate-900/60 rounded-xl border border-slate-600/50 overflow-hidden shadow-lg">
                                 <!-- Header Colapsable -->
@@ -639,22 +639,15 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
                             </button>
                             <?php endif; ?>
                             
-                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                <?php if ($esAdministrador): ?>
-                                <button onclick="descargarPDF(<?= $orden_id ?>)" 
-                                   class="bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-lg text-center font-semibold transition-all text-sm shadow-md hover:shadow-lg">
-                                    <i class="bi bi-printer mr-1"></i>PDF
-                                </button>
-                                <?php endif; ?>
-                                
+                            <div class="grid grid-cols-1 gap-2">
                                 <?php if ($impresora_configurada): ?>
                                 <button onclick="imprimirTicketTermico(<?= $orden_id ?>)" 
-                                        class="<?= $esAdministrador ? '' : 'col-span-2' ?> bg-purple-600 hover:bg-purple-700 text-white py-2.5 rounded-lg font-semibold transition-all text-sm shadow-md hover:shadow-lg">
+                                        class="bg-purple-600 hover:bg-purple-700 text-white py-2.5 rounded-lg font-semibold transition-all text-sm shadow-md hover:shadow-lg">
                                     <i class="bi bi-receipt mr-1"></i>Térmica
                                 </button>
                                 <?php else: ?>
                                 <a href="index.php?page=configuracion&tab=impresoras" 
-                                   class="<?= $esAdministrador ? '' : 'col-span-2' ?> block bg-slate-600 hover:bg-slate-700 text-white py-2.5 rounded-lg text-center font-semibold transition-all text-sm">
+                                   class="block bg-slate-600 hover:bg-slate-700 text-white py-2.5 rounded-lg text-center font-semibold transition-all text-sm">
                                     <i class="bi bi-gear mr-1"></i>Configurar
                                 </a>
                                 <?php endif; ?>
@@ -746,6 +739,7 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
     const mesaId = <?= $mesa_id ?>;
     const ordenId = <?= $orden_id ?>;
     const esAdministrador = <?= $esAdministrador ? 'true' : 'false' ?>;
+    const puedeAnularPagos = <?= in_array($userInfo['rol'], ['administrador', 'cajero'], true) ? 'true' : 'false' ?>;
 
     // Variables para división de cuentas
     let divisionCuenta = false;
@@ -1027,64 +1021,6 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
             });
     }
 
-    /** 🔹 Descargar PDF (Compatible con PWA) */
-    function descargarPDF(ordenId) {
-        // Mostrar loading
-        Swal.fire({
-            title: 'Generando PDF...',
-            text: 'Por favor espera',
-            allowOutsideClick: false,
-            didOpen: function() {
-                Swal.showLoading();
-            }
-        });
-
-        // Usar fetch para obtener el PDF
-        fetch('controllers/impresion_ticket.php?orden_id=' + ordenId)
-            .then(function(response) {
-                if (!response.ok) {
-                    throw new Error('Error al generar el PDF');
-                }
-                return response.blob();
-            })
-            .then(function(blob) {
-                // Crear un URL temporal para el blob
-                const url = window.URL.createObjectURL(blob);
-                
-                // Crear un enlace temporal para descargar
-                const a = document.createElement('a');
-                a.style.display = 'none';
-                a.href = url;
-                a.download = 'ticket_orden_' + ordenId + '.pdf';
-                
-                // Agregar al DOM, hacer clic y remover
-                document.body.appendChild(a);
-                a.click();
-                
-                // Limpiar
-                window.URL.revokeObjectURL(url);
-                document.body.removeChild(a);
-                
-                // Cerrar loading y mostrar éxito
-                Swal.fire({
-                    icon: 'success',
-                    title: '¡PDF Generado!',
-                    text: 'El ticket se ha descargado correctamente',
-                    timer: 2000,
-                    showConfirmButton: false
-                });
-            })
-            .catch(function(error) {
-                console.error('Error:', error);
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Error',
-                    text: 'No se pudo generar el PDF. Intenta nuevamente.',
-                    confirmButtonColor: '#dc2626'
-                });
-            });
-    }
-
     /** 🔹 Agregar producto */
     let productoSeleccionadoId = null;
     let variedadesSeleccionadas = {};
@@ -1110,8 +1046,10 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
                         productoSeleccionadoId = producto_id;
                         abrirModalVariedades(producto);
                     } else {
-                        // Agregar directamente sin variedades
-                        agregarProductoDirecto(producto_id, null);
+                        // Sin variedades: preguntar cuántas piezas
+                        preguntarCantidadProducto(producto).then(function(cantidad) {
+                            if (cantidad) agregarProductoDirecto(producto_id, null, null, cantidad);
+                        });
                     }
                 } else {
                     // Si no se puede obtener info, agregar directamente
@@ -1124,8 +1062,38 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
             });
     }
     
+    /** 🔹 Modal para elegir cantidad de piezas; resuelve con el número o null si se cancela */
+    function preguntarCantidadProducto(producto) {
+        return Swal.fire({
+            title: String(producto.nombre || 'Producto'),
+            text: '¿Cuántas piezas desea agregar?',
+            input: 'number',
+            inputValue: 1,
+            inputAttributes: { min: 1, max: 99, step: 1, inputmode: 'numeric' },
+            showCancelButton: true,
+            confirmButtonText: 'Agregar',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#10b981',
+            background: '#1f2937',
+            color: '#ffffff',
+            didOpen: function() {
+                const input = Swal.getInput();
+                if (input) { input.focus(); input.select(); }
+            },
+            inputValidator: function(value) {
+                const n = Number(value);
+                if (!Number.isInteger(n) || n < 1 || n > 99) {
+                    return 'Ingrese una cantidad entre 1 y 99';
+                }
+            }
+        }).then(function(result) {
+            return result.isConfirmed ? parseInt(result.value, 10) : null;
+        });
+    }
+
     /** 🔹 Agregar producto directamente (con o sin variedades) */
-    function agregarProductoDirecto(producto_id, variedades, notaAdicional) {
+    function agregarProductoDirecto(producto_id, variedades, notaAdicional, cantidad) {
+        cantidad = cantidad || 1;
         console.log('🔹 agregarProductoDirecto llamado con:', {
             producto_id_recibido: producto_id,
             tipo_producto_id: typeof producto_id,
@@ -1142,7 +1110,7 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
         
         const formData = new URLSearchParams({
             producto_id: producto_id,
-            cantidad: 1,
+            cantidad: cantidad,
             orden_id: ordenId
         });
         
@@ -2270,36 +2238,6 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
                         '</div>';
                 }
 
-                // Mostrar notas adicionales si existen
-                let notasAdicionales = [];
-                if (data.items && data.items.length > 0) {
-                    data.items.forEach(function(item) {
-                        if (item.nota_adicional && item.nota_adicional.trim() !== '' && item.cancelado != 1) {
-                            notasAdicionales.push({
-                                nombre: item.nombre,
-                                nota: item.nota_adicional
-                            });
-                        }
-                    });
-                }
-
-                if (notasAdicionales.length > 0) {
-                    resumen += '<div class="mt-3 p-3 bg-yellow-500/10 rounded-lg border border-yellow-500/30">' +
-                        '<div class="text-yellow-300 text-xs font-semibold mb-2 flex items-center gap-1">' +
-                        '<i class="bi bi-sticky"></i> Notas adicionales:' +
-                        '</div>' +
-                        '<div class="space-y-2">';
-                    
-                    notasAdicionales.forEach(function(item) {
-                        resumen += '<div class="text-xs">' +
-                            '<span class="text-yellow-400 font-medium">' + item.nombre + ':</span> ' +
-                            '<span class="text-yellow-100">' + item.nota + '</span>' +
-                            '</div>';
-                    });
-                    
-                    resumen += '</div></div>';
-                }
-
                 resumen += '</div>';
                 document.getElementById('orden-totales').innerHTML = resumen;
                 
@@ -3162,8 +3100,20 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
             })
             .then(function(data) {
                 if (data.success) {
-                    // Configurar variables globales
                     divisionCuenta = true;
+
+                    if (data.reanudado) {
+                        numeroDivisiones = Math.max(data.numero_divisiones, data.proximo_numero);
+                        pagoActual = data.proximo_numero;
+                        totalPagado = parseFloat(data.total_pagado) || 0;
+                        pagosRealizados = data.pagos.map(function(p) {
+                            return { numero: parseInt(p.numero_pago), monto: parseFloat(p.monto), metodo: p.metodo_pago };
+                        });
+                        Swal.close();
+                        mostrarModalMetodosPago(total, totalText, true, pagoActual, numeroDivisiones);
+                        return;
+                    }
+
                     numeroDivisiones = numDivisiones;
                     pagoActual = 1;
                     totalPagado = 0;
@@ -3289,61 +3239,58 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
                     '</div>',
                 icon: 'question',
                 showCancelButton: true,
+                showDenyButton: puedeAnularPagos && esDivision && totalPagado > 0,
+                denyButtonText: 'Anular un pago',
+                denyButtonColor: '#f59e0b',
                 confirmButtonText: esDivision ? (esUltimoPago ? 'Finalizar pago' : 'Registrar pago') : 'Sí, cerrar orden',
                 cancelButtonText: 'Cancelar',
                 confirmButtonColor: '#10b981',
-                cancelButtonColor: '#6b7280'
-            }).then(function(result) {
-                if (result.isConfirmed) {
-                    // Obtener el método de pago seleccionado
+                cancelButtonColor: '#6b7280',
+                // Validar sin cerrar el modal para no perder lo capturado
+                preConfirm: function() {
                     const metodoPago = document.querySelector('input[name="metodo_pago"]:checked').value;
-                    
-                    // Obtener monto a pagar
                     let montoAPagar = montoPagar;
+
                     if (esDivision && !esUltimoPago) {
-                        const montoInput = document.getElementById('monto-division');
-                        montoAPagar = parseFloat(montoInput.value) || 0;
-                        
+                        montoAPagar = Math.round((parseFloat(document.getElementById('monto-division').value) || 0) * 100) / 100;
+
                         if (montoAPagar <= 0) {
-                            Swal.fire({
-                                icon: 'error',
-                                title: 'Monto inválido',
-                                text: 'Debe ingresar un monto válido mayor a 0',
-                                confirmButtonColor: '#ef4444'
-                            });
-                            return;
+                            Swal.showValidationMessage('Debe ingresar un monto válido mayor a 0');
+                            return false;
                         }
-                        
-                        if (montoAPagar > montoPagar) {
-                            Swal.fire({
-                                icon: 'error',
-                                title: 'Monto excesivo',
-                                text: 'El monto no puede ser mayor al restante ($' + montoPagar.toFixed(2) + ')',
-                                confirmButtonColor: '#ef4444'
-                            });
-                            return;
+                        if (montoAPagar > montoPagar + 0.005) {
+                            Swal.showValidationMessage('El monto no puede ser mayor al restante ($' + montoPagar.toFixed(2) + ')');
+                            return false;
+                        }
+                        if (montoAPagar >= montoPagar - 0.005) {
+                            Swal.showValidationMessage('Este monto cubre todo el restante; use más divisiones o ajuste el monto');
+                            return false;
                         }
                     }
 
-                    // Validar efectivo si es necesario
                     let dineroRecibido = null;
                     let cambio = null;
-                    
                     if (metodoPago === 'efectivo') {
                         dineroRecibido = parseFloat(document.getElementById('dinero-recibido').value) || 0;
-                        
                         if (dineroRecibido < montoAPagar) {
-                            Swal.fire({
-                                icon: 'error',
-                                title: 'Dinero insuficiente',
-                                text: 'El dinero recibido debe ser mayor o igual al monto a pagar',
-                                confirmButtonColor: '#ef4444'
-                            });
-                            return;
+                            Swal.showValidationMessage('El dinero recibido debe ser mayor o igual al monto a pagar ($' + montoAPagar.toFixed(2) + ')');
+                            return false;
                         }
-                        
                         cambio = dineroRecibido - montoAPagar;
                     }
+
+                    return { metodoPago: metodoPago, montoAPagar: montoAPagar, dineroRecibido: dineroRecibido, cambio: cambio };
+                }
+            }).then(function(result) {
+                if (result.isDenied) {
+                    anularPagoParcial(totalOrdenCompleta, totalText, totalDivisiones);
+                    return;
+                }
+                if (result.isConfirmed) {
+                    const metodoPago = result.value.metodoPago;
+                    const montoAPagar = result.value.montoAPagar;
+                    const dineroRecibido = result.value.dineroRecibido;
+                    const cambio = result.value.cambio;
 
                     // Si es división, registrar pago parcial
                     if (esDivision) {
@@ -3434,13 +3381,121 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
             })
             .catch(function(error) {
                 console.error('Error:', error);
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Error',
-                    text: 'No se pudo registrar el pago: ' + error.message,
-                    confirmButtonColor: '#ef4444'
-                });
+                // Resincronizar con el servidor y reabrir el pago para reintentar
+                fetch('/POSSystemKalli/controllers/division_cuentas.php?action=estado_pagos&orden_id=' + encodeURIComponent(ordenId))
+                    .then(function(r) { return r.json(); })
+                    .then(function(estado) {
+                        if (estado.success) {
+                            totalPagado = parseFloat(estado.total_pagado) || 0;
+                            pagosRealizados = estado.pagos.map(function(p) {
+                                return { numero: parseInt(p.numero_pago), monto: parseFloat(p.monto), metodo: p.metodo_pago };
+                            });
+                            pagoActual = estado.proximo_numero;
+                            numeroDivisiones = Math.max(totalDivisiones, pagoActual);
+                        }
+                    })
+                    .catch(function() {})
+                    .then(function() {
+                        return Swal.fire({
+                            icon: 'error',
+                            title: 'No se pudo registrar el pago',
+                            text: error.message + '. Revise los datos e intente de nuevo.',
+                            confirmButtonText: 'Reintentar',
+                            confirmButtonColor: '#ef4444'
+                        });
+                    })
+                    .then(function() {
+                        mostrarModalMetodosPago(totalOrdenCompleta, totalText, true, pagoActual, numeroDivisiones);
+                    });
             });
+        }
+
+        /** 🔹 Anular un pago parcial ya registrado (administrador/cajero) */
+        function anularPagoParcial(totalOrdenCompleta, totalText, totalDivisiones) {
+            const url = '/POSSystemKalli/controllers/division_cuentas.php';
+            const volver = function() {
+                return fetch(url + '?action=estado_pagos&orden_id=' + encodeURIComponent(ordenId))
+                    .then(function(r) { return r.json(); })
+                    .then(function(estado) {
+                        if (estado.success) {
+                            totalPagado = parseFloat(estado.total_pagado) || 0;
+                            pagosRealizados = estado.pagos.map(function(p) {
+                                return { numero: parseInt(p.numero_pago), monto: parseFloat(p.monto), metodo: p.metodo_pago };
+                            });
+                            pagoActual = estado.proximo_numero;
+                            numeroDivisiones = Math.max(totalDivisiones, pagoActual);
+                        }
+                    })
+                    .catch(function() {})
+                    .then(function() {
+                        mostrarModalMetodosPago(totalOrdenCompleta, totalText, true, pagoActual, numeroDivisiones);
+                    });
+            };
+
+            fetch(url + '?action=estado_pagos&orden_id=' + encodeURIComponent(ordenId))
+                .then(function(r) { return r.json(); })
+                .then(function(estado) {
+                    if (!estado.success || !estado.pagos.length) {
+                        return Swal.fire({ icon: 'info', title: 'No hay pagos para anular' }).then(volver);
+                    }
+
+                    const esc = function(s) { return String(s).replace(/[&<>"']/g, function(c) { return '&#' + c.charCodeAt(0) + ';'; }); };
+                    let opciones = '';
+                    estado.pagos.forEach(function(p) {
+                        opciones += '<option value="' + parseInt(p.id) + '">Pago ' + parseInt(p.numero_pago) + ' - $' +
+                            parseFloat(p.monto).toFixed(2) + ' (' + esc(p.metodo_pago) + ')</option>';
+                    });
+
+                    return Swal.fire({
+                        title: 'Anular pago',
+                        html: '<div class="text-left">' +
+                            '<label class="block text-sm font-medium text-gray-700 mb-1">Pago a anular:</label>' +
+                            '<select id="anular-pago-id" class="w-full px-3 py-2 border border-gray-300 rounded-md mb-3">' + opciones + '</select>' +
+                            '<label class="block text-sm font-medium text-gray-700 mb-1">Motivo (obligatorio):</label>' +
+                            '<textarea id="anular-pago-motivo" class="w-full px-3 py-2 border border-gray-300 rounded-md" rows="2" placeholder="Ej. Monto capturado incorrectamente"></textarea>' +
+                            '<p class="text-xs text-red-600 mt-2">Si ya se entregó efectivo o se cobró en terminal, regrese ese dinero o cancele el cargo.</p>' +
+                            '</div>',
+                        icon: 'warning',
+                        showCancelButton: true,
+                        confirmButtonText: 'Anular pago',
+                        cancelButtonText: 'Volver',
+                        confirmButtonColor: '#ef4444',
+                        preConfirm: function() {
+                            const motivo = document.getElementById('anular-pago-motivo').value.trim();
+                            if (motivo.length < 5) {
+                                Swal.showValidationMessage('Indique el motivo (mínimo 5 caracteres)');
+                                return false;
+                            }
+                            return fetch(url + '?action=anular_pago', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                                body: new URLSearchParams({
+                                    orden_id: ordenId,
+                                    pago_id: document.getElementById('anular-pago-id').value,
+                                    motivo: motivo
+                                })
+                            })
+                            .then(function(r) { return r.json(); })
+                            .then(function(data) {
+                                if (!data.success) {
+                                    Swal.showValidationMessage(data.error || 'No se pudo anular el pago');
+                                    return false;
+                                }
+                                return true;
+                            })
+                            .catch(function() {
+                                Swal.showValidationMessage('Error de comunicación con el servidor');
+                                return false;
+                            });
+                        }
+                    }).then(function(res) {
+                        if (res.isConfirmed) {
+                            return Swal.fire({ icon: 'success', title: 'Pago anulado', timer: 1500, showConfirmButton: false }).then(volver);
+                        }
+                        return volver();
+                    });
+                })
+                .catch(function() { volver(); });
         }
 
         /** 🔹 Mostrar resumen y continuar con siguiente pago */
@@ -3548,7 +3603,8 @@ $impresora_configurada = !empty($config_impresion['nombre_impresora'] ?? '');
         }
 
         /** 🔹 Calcular cambio para división de cuenta */
-        function calcularCambioDivision(montoPagar, esDivision, esUltimoPago) {
+        // Global: el modal la invoca desde un oninput inline
+        window.calcularCambioDivision = function calcularCambioDivision(montoPagar, esDivision, esUltimoPago) {
             // Si es división y no es último pago, primero validar que se ingresó el monto
             if (esDivision && !esUltimoPago) {
                 const montoInput = document.getElementById('monto-division');

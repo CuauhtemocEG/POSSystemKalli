@@ -490,7 +490,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   ?>
     <!-- Mesa Card - Kiosk -->
-    <div class="kiosk-mesa-card group" data-mesa-id="<?= $mesa['id'] ?>" data-mesa-nombre="<?= htmlspecialchars($mesa['nombre']) ?>" data-orden-abierta="<?= $mesa['orden_abierta'] ?>" data-orden-total="<?= $mesa['orden_total'] ?? 0 ?>">
+    <div class="kiosk-mesa-card group" data-mesa-id="<?= $mesa['id'] ?>" data-mesa-nombre="<?= htmlspecialchars($mesa['nombre']) ?>" data-orden-abierta="<?= $mesa['orden_abierta'] ?>" data-orden-total="<?= $mesa['orden_total'] ?? 0 ?>" data-orden-id="<?= intval($mesa['orden_id'] ?? 0) ?>">
       <div class="mesa-card-shell <?= $cardClass ?>" id="mesa-card-<?= $mesa['id'] ?>">
         <button type="button" class="mesa-delete-btn absolute top-3 right-3 z-20 w-8 h-8 rounded-full bg-red-500/80 hover:bg-red-600 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
           title="Eliminar mesa"
@@ -544,6 +544,13 @@ document.addEventListener('DOMContentLoaded', function() {
               Total
             </span>
             <span class="<?= $detailTextClass ?> font-semibold mesa-total-valor">$<?= $mesa['orden_total'] ?? '0.00' ?></span>
+          </div>
+          <div class="mesa-card-info-item mesa-promo-row" style="display:none;">
+            <span class="mesa-card-info-label">
+              <i class="bi bi-tags mr-2"></i>
+              Promoción
+            </span>
+            <span class="text-yellow-300 font-semibold text-right mesa-promo-valor"></span>
           </div>
           <div class="mesa-card-info-item mesa-mesero-row" <?= (!empty($mesa['mesero_nombre']) && trim($mesa['mesero_nombre']) !== '') ? '' : 'style="display:none;"' ?>>
             <span class="mesa-card-info-label">
@@ -750,6 +757,44 @@ document.addEventListener('DOMContentLoaded', function() {
     let autoUpdateInterval = null;
     let ultimaActualizacion = Date.now();
 
+    // Muestra las promociones/descuentos aplicados a la orden abierta de la mesa
+    function actualizarPromoMesa(card, ordenId, ocupada) {
+        const row = card.querySelector('.mesa-promo-row');
+        const valor = card.querySelector('.mesa-promo-valor');
+        if (!row || !valor) return;
+        if (!ocupada || !ordenId) {
+            row.style.display = 'none';
+            return;
+        }
+        fetch('/POSSystemKalli/controllers/newPos/orden_actual.php?orden_id=' + encodeURIComponent(ordenId) + '&_=' + Date.now(), { cache: 'no-store' })
+            .then(r => r.json())
+            .then(data => {
+                const nombres = [];
+                (data.promociones || []).forEach(p => {
+                    if (p.nombre && !nombres.includes(p.nombre)) nombres.push(p.nombre);
+                });
+                const dp = data.descuento_porcentaje;
+                if (dp && dp.aplicado && dp.monto > 0) nombres.push('Descuento ' + dp.porcentaje + '%');
+                valor.textContent = nombres.join(', ');
+                row.style.display = nombres.length ? '' : 'none';
+
+                // Total original tachado, total final y monto de descuento a un lado
+                const descuento = (Number(data.total_descuentos_promociones) || 0) + (dp && dp.aplicado ? Number(dp.monto) || 0 : 0) + (Number(data.descuento) || 0);
+                const totalValor = card.querySelector('.mesa-total-valor');
+                if (totalValor && descuento > 0.005) {
+                    const final = Number(data.total) || 0;
+                    const tachado = document.createElement('span');
+                    tachado.className = 'line-through opacity-60 mr-1';
+                    tachado.textContent = '$' + (final + descuento).toFixed(2);
+                    const aviso = document.createElement('span');
+                    aviso.className = 'text-yellow-300 text-xs ml-1';
+                    aviso.textContent = '(-$' + descuento.toFixed(2) + ')';
+                    totalValor.replaceChildren(tachado, document.createTextNode('$' + final.toFixed(2)), aviso);
+                }
+            })
+            .catch(() => {});
+    }
+
     // Actualiza la tarjeta del grid superior (kiosk-mesa-card) con los datos recibidos
     function actualizarTarjetaKiosk(mesaData) {
         const card = document.querySelector(`.kiosk-mesa-card[data-mesa-id="${mesaData.id}"]`);
@@ -798,6 +843,7 @@ document.addEventListener('DOMContentLoaded', function() {
             totalValor.classList.toggle('text-red-300', ocupada);
             totalValor.classList.toggle('text-emerald-300', !ocupada);
         }
+        actualizarPromoMesa(card, mesaData.orden_id, ocupada);
 
         const meseroRow = card.querySelector('.mesa-mesero-row');
         const meseroValor = card.querySelector('.mesa-mesero-valor');
@@ -1005,6 +1051,10 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     // === INICIAR AUTO-ACTUALIZACIÓN AL CARGAR ===
+    document.querySelectorAll('.kiosk-mesa-card').forEach(card => {
+        const id = parseInt(card.dataset.ordenId, 10);
+        if (id > 0) actualizarPromoMesa(card, id, true);
+    });
     // Activar automáticamente polling cada 15 segundos
     setTimeout(() => {
         iniciarActualizacionAutomatica(15); // 15 segundos por defecto
